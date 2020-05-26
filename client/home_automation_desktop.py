@@ -14,8 +14,8 @@ from   tk_tools.images import rotary_gauge_volt
 import socket
 import pickle
 
-FENCEPOST = '192.168.1.122'
-FLOWMETER = '10.10.10.113'
+FENCEPOST = "fencepost_back_1"
+FLOWMETER = "flowmeter"
 
 
 HOME_AUTOMATION_PORT = 6554         # The port used by the server
@@ -102,14 +102,18 @@ def updateDisplay():
         s.close()
 
 
+
+#
+# Create monitor/control window
+#
+
 root = tk.Tk()
-
-#
-# Set up flowmieter window
-#
-
-root.title("Flowmeter")
+root.title("Mitchell Home Automation")
 root.geometry('640x480')
+
+#
+# Set up flowmeter
+#
 meter = tk_tools.RotaryScale(root,
                           max_value=20,
                           size=100,
@@ -128,7 +132,6 @@ power = tk.Label(root)
 power.grid(column=0, row=2)
 power.volts = 0.0
 power.ma    = 0.0
-
 
 #
 # Set up fencepost lighting
