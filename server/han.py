@@ -121,11 +121,18 @@ class flowThread(threading.Thread):
     #   The input is sampled every 100 ms. On a low to high transition
     #   the totalizer is incremented 0.1 gallons.
     #
+    #   Flow rate is only computed when a pulse is received. If the flow substantially
+    #   reduces or stops the igpm value will be incorrect. To compensate a ceiling
+    #   value is substituted for the last computed igpm when there are no pulses,
+    #   and a ceiling of < 0.5 gpm is rounded down to zero.
+    #
     #   A logfile records cumulative gallons every minute when water is flowing.
     #   Each record is a line in the file of format <timestamp> cumgal.x gpm.x
     #
 
-    SAMPLE_INTERVAL = .050    # sample flow pulse every 50 ms
+    SAMPLE_INTERVAL = 0.050     # sample flow pulse every 50 ms
+    MIN_FLOW_RATE   = 0.35      # gpm, flow rates below this are rounded to zero
+    LEAK_DETECT_DT  = 300       # seconds between pulses indicates possible leak
 
     def __init__(self):
         threading.Thread.__init__(self)
@@ -149,29 +156,48 @@ class flowThread(threading.Thread):
         flowing    = False         # flowmeter activity detected
 
         while True:
+            # determine instantaneous gpm assuming a pulse has been received
+            # this is the ceiling of the current flow rate
+            now = time.monotonic()
+            if last_pulse != 0:                 # avoid bogus value at startup
+                dt = now - last_pulse
+                igpm = 60 * (0.1/(dt)) # instantaneous GPM
+            else:
+                igpm = 0.0
+
+            # very low flow rates are unrealistic, it is either a computed
+            # ceiling or a leak
+            if igpm < MIN_FLOW_RATE:
+                igpm = 0
+
+            #
+            # Pulse received, so computed igpm (ceiling) is actual igpm
+            #
             current_state = flow_meter.value        # pulse line is high or low
             if (not last_state) and current_state:  # on rising edge of pulse
                 flowing = True                      # flowmeter activity detected
-                this_pulse = time.monotonic()       # to determine e.t. since last pulse
-                gallons += 0.1
-                if last_pulse != 0:                 # avoid bogus value at startup
-                    igpm = 60 * (0.1/(this_pulse - last_pulse)) # instantaneous GPM
-                last_pulse = this_pulse
+                gallons += 0.1                      # increment totalizer
+                last_pulse = now                    # save to determine next interval
 
-                # update global variable with latest sample
-                with g_flow_lock:
-                    g_flow_latest = (igpm, gallons)
+            # update global variable with latest sample or computed ceiling
+            with g_flow_lock:
+                g_flow_latest = (igpm, gallons)
 
+            # first pulse in a long time
+            if flowing and (dt > LEAK_DETECT_DT):
+                log.info("Flow startup or Possible Leak")
+
+            # log time and flow rate
             last_state = current_state
             now = int(time.strftime("%M"))
             if ((now != last_record_time) and flowing):   # record on the minute
                 record = time.strftime("%m/%d/%Y %H:%M")+"\t%.1f"%igpm+"\t%.0f"%gallons+'\n'
-                log.info(record)
+                log.debug(record)
                 with open('flowrecord.txt', 'a') as f:
                     f.write(record)
                 last_record_time = now
                 flowing = False                     # reset flag
-
+                
             time.sleep(flowThread.SAMPLE_INTERVAL)
 
 
@@ -394,10 +420,10 @@ class serverThread(threading.Thread):
 if __name__ == "__main__":
 
     # Set up a logger
-    log_format  ='%(asctime)s %(levelname[:1])s %(message)s'
+    log_format ='%(asctime)s %(levelname[:1])s %(message)s'
     log_datefmt ='%m/%d/%Y %H:%M:%S '
     log_file_handler = logging.handlers.RotatingFileHandler(LOG_FILENAME, maxBytes=(256*1024), backupCount=3, level=logging.INFO)    # 256K max file size, 4 files max
-    log_level   = logging.DEBUG
+    log_level = logging.DEBUG
     logging.basicConfig(format=log_format, datefmt=log_datefmt, handlers=(logging.StreamHandler(), log_file_handler), level=log_level)
     log = logging.getLogger('')
 
