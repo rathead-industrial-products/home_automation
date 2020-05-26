@@ -6,8 +6,8 @@
 Universal code base for Raspberry Pi based home automation nodes.
 
 1. Fencepost Lighting Controller
-2. Voltage/Current Sampler
-3. Hunter Flow Meter Monitor
+2. Hunter Flow Meter Monitor
+3. Voltage/Current Sampler
 4. TCP/IP Socket Server
 
 The nodes have a Pi Bonnet that contains a power supply, an RS-422
@@ -44,6 +44,135 @@ g_vi_lock      = threading.Lock()
 
 g_flow_latest  = (1, 2)                 # global variable containing latest (gpm, gal) sample
 g_flow_lock    = threading.Lock()
+
+class viThread(threading.Thread):
+    SAMPLE_INTERVAL = 60    # sample voltage and current once every minute
+    READ_VIN = 0xD0
+    READ_CUR = 0xF0
+
+    def __init__(self):
+        threading.Thread.__init__(self)
+        self.daemon = True
+
+    def run(self):
+        global g_vi_latest
+        global g_vi_lock
+
+        log.info("viThread running")
+
+        # Set up SPI communications
+        cs = digitalio.DigitalInOut(board.D22)      # NC, ignored. SPI_CS0 is used
+        comm_port = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
+        device = adafruit_bus_device.spi_device.SPIDevice(comm_port, cs)
+
+        command = bytearray(3)
+        result  = bytearray(3)
+
+        while True:
+            with device as spi:
+                command[0] = viThread.READ_VIN
+                command[1] = 0x00
+                command[2] = 0x00
+                spi.write_readinto(command, result)
+
+            adc_value = int.from_bytes(result, byteorder='big')>>7 # bits 8-19 are valid
+            vin = (33 * adc_value) / 4096     # adc input is Vin/10
+
+            with device as spi:
+                command[0] = viThread.READ_CUR
+                command[1] = 0x00
+                command[2] = 0x00
+                spi.write_readinto(command, result)
+
+            adc_value = int.from_bytes(result, byteorder='big')>>7 # bits 8-19 are valid
+            cur = (1000 * adc_value) / 4096      # adc input is 3.3V @ 1000 mA of current
+
+            if vi_q.full(): # remove oldest item if queue full
+                try:
+                    vi_q.get_nowait()
+                except:
+                    pass    # ignore if something else emptied queue first
+
+            try:
+                vi_q.put_nowait((vin, cur))
+            except:
+                log.error("Unable to add record to vi_q")
+
+            # update global variable with latest sample
+            with g_vi_lock:
+                g_vi_latest = (vin, cur)
+
+            time.sleep(viThread.SAMPLE_INTERVAL)
+
+
+class flowThread(threading.Thread):
+    #
+    #   Hunter HC Pulse Flow Meter
+    #   Flow meter interface is two wires (blue and white)
+    #   connected through a reed relay.
+    #   The relay pulses every 0.1 gallon.
+    #   The duty cycle was empirically determined to be 60/40 open/closed.
+    #   Max pulse rate vs flow rate:
+    #   FLOW RATE (GPM)     6      12      18      24
+    #   Pulses per second   1       2       3       4
+    #   Minimum relay closed time at 24 GPM = 0.4 x 1/4 second = 100 ms
+    #   The blue wire is connected to GPIO input pin D18 with an internal pullup.
+    #   The white wire is connected to GND.
+    #   The input is sampled every 100 ms. On a low to high transition
+    #   the totalizer is incremented 0.1 gallons.
+    #
+    #   A logfile records cumulative gallons every minute when water is flowing.
+    #   Each record is a line in the file of format <timestamp> cumgal.x gpm.x
+    #
+
+    SAMPLE_INTERVAL = .050    # sample flow pulse every 50 ms
+
+    def __init__(self):
+        threading.Thread.__init__(self)
+        self.daemon = True
+
+    def run(self):
+        global g_flow_latest
+        global g_flow_lock
+
+        log.info("flowThread running")
+
+        flow_meter = digitalio.DigitalInOut(board.D18)
+        flow_meter.direction = digitalio.Direction.INPUT
+        flow_meter.pull = digitalio.Pull.UP
+
+        gallons    = 0.0
+        igpm       = 0.0
+        last_state = False
+        last_pulse = 0
+        last_record_time = 0
+        flowing    = False         # flowmeter activity detected
+
+        while True:
+            current_state = flow_meter.value        # pulse line is high or low
+            if (not last_state) and current_state:  # on rising edge of pulse
+                flowing = True                      # flowmeter activity detected
+                this_pulse = time.monotonic()       # to determine e.t. since last pulse
+                gallons += 0.1
+                if last_pulse != 0:                 # avoid bogus value at startup
+                    igpm = 60 * (0.1/(this_pulse - last_pulse)) # instantaneous GPM
+                last_pulse = this_pulse
+
+                # update global variable with latest sample
+                with g_flow_lock:
+                    g_flow_latest = (igpm, gallons)
+
+            last_state = current_state
+            now = int(time.strftime("%M"))
+            if ((now != last_record_time) and flowing):   # record on the minute
+                record = time.strftime("%m/%d/%Y %H:%M")+"\t%.1f"%igpm+"\t%.0f"%gallons+'\n'
+                log.info(record)
+                with open('flowrecord.txt', 'a') as f:
+                    f.write(record)
+                last_record_time = now
+                flowing = False                     # reset flag
+
+            time.sleep(flowThread.SAMPLE_INTERVAL)
 
 
 class fpLightingThread(threading.Thread):
@@ -190,140 +319,6 @@ class fpLightingThread(threading.Thread):
                 log.warning("Unrecognized lighting message type = %s", self.light_style[0])
 
 
-class viThread(threading.Thread):
-    SAMPLE_INTERVAL = 60    # sample voltage and current once every minute
-    READ_VIN = 0xD0
-    READ_CUR = 0xF0
-
-    def __init__(self):
-        threading.Thread.__init__(self)
-        self.daemon = True
-
-    def run(self):
-        global g_vi_latest
-        global g_vi_lock
-
-        log.info("viThread running")
-
-        # Set up SPI communications
-        cs = digitalio.DigitalInOut(board.D22)      # NC, ignored. SPI_CS0 is used
-        comm_port = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
-        device = adafruit_bus_device.spi_device.SPIDevice(comm_port, cs)
-
-        command = bytearray(3)
-        result  = bytearray(3)
-
-        while True:
-            with device as spi:
-                command[0] = viThread.READ_VIN
-                command[1] = 0x00
-                command[2] = 0x00
-                spi.write_readinto(command, result)
-
-            adc_value = int.from_bytes(result, byteorder='big')>>7 # bits 8-19 are valid
-            vin = (33 * adc_value) / 4096     # adc input is Vin/10
-
-            with device as spi:
-                command[0] = viThread.READ_CUR
-                command[1] = 0x00
-                command[2] = 0x00
-                spi.write_readinto(command, result)
-
-            adc_value = int.from_bytes(result, byteorder='big')>>7 # bits 8-19 are valid
-            cur = (1000 * adc_value) / 4096      # adc input is 3.3V @ 1000 mA of current
-
-            if vi_q.full(): # remove oldest item if queue full
-                try:
-                    vi_q.get_nowait()
-                except:
-                    pass    # ignore if something else emptied queue first
-
-            try:
-                vi_q.put_nowait((vin, cur))
-            except:
-                log.error("Unable to add record to vi_q")
-
-            # update global variable with latest sample
-            with g_vi_lock:
-                g_vi_latest = (vin, cur)
-
-            time.sleep(viThread.SAMPLE_INTERVAL)
-
-
-
-class flowThread(threading.Thread):
-    #
-    #   Hunter HC Pulse Flow Meter
-    #   Flow meter interface is two wires (blue and white)
-    #   connected through a reed relay.
-    #   The relay pulses every 0.1 gallon.
-    #   The duty cycle was empirically determined to be 60/40 open/closed.
-    #   Max pulse rate vs flow rate:
-    #   FLOW RATE (GPM)     6      12      18      24
-    #   Pulses per second   1       2       3       4
-    #   Minimum relay closed time at 24 GPM = 0.4 x 1/4 second = 100 ms
-    #   The blue wire is connected to GPIO input pin D18 with an internal pullup.
-    #   The white wire is connected to GND.
-    #   The input is sampled every 100 ms. On a low to high transition
-    #   the totalizer is incremented 0.1 gallons.
-    #
-    #   A logfile records cumulative gallons every minute when water is flowing.
-    #   Each record is a line in the file of format <timestamp> cumgal.x gpm.x
-    #
-
-    SAMPLE_INTERVAL = .050    # sample flow pulse every 50 ms
-
-    def __init__(self):
-        threading.Thread.__init__(self)
-        self.daemon = True
-
-    def run(self):
-        global g_flow_latest
-        global g_flow_lock
-
-        log.info("flowThread running")
-
-        flow_meter = digitalio.DigitalInOut(board.D18)
-        flow_meter.direction = digitalio.Direction.INPUT
-        flow_meter.pull = digitalio.Pull.UP
-
-        gallons    = 0.0
-        igpm       = 0.0
-        last_state = False
-        last_pulse = 0
-        last_record_time = 0
-        flowing    = False         # flowmeter activity detected
-
-        while True:
-            current_state = flow_meter.value        # pulse line is high or low
-            if (not last_state) and current_state:  # on rising edge of pulse
-                flowing = True                      # flowmeter activity detected
-                this_pulse = time.monotonic()       # to determine e.t. since last pulse
-                gallons += 0.1
-                if last_pulse != 0:                 # avoid bogus value at startup
-                    igpm = 60 * (0.1/(this_pulse - last_pulse)) # instantaneous GPM
-                last_pulse = this_pulse
-
-                # update global variable with latest sample
-                with g_flow_lock:
-                    g_flow_latest = (igpm, gallons)
-
-            last_state = current_state
-            now = int(time.strftime("%M"))
-            if ((now != last_record_time) and flowing):   # record on the minute
-                record = time.strftime("%m/%d/%Y %H:%M")+"\t%.1f"%igpm+"\t%.0f"%gallons+'\n'
-                log.info(record)
-                with open('flowrecord.txt', 'a') as f:
-                    f.write(record)
-                last_record_time = now
-                flowing = False                     # reset flag
-
-            time.sleep(flowThread.SAMPLE_INTERVAL)
-
-
-
-
-
 
 HOST = ''           # Listen on all IP addresses on this host
 PORT = 6554         # Port to listen on (non-privileged ports are > 1023)
@@ -359,7 +354,7 @@ class serverThread(threading.Thread):
                     break
 
             msg = pickle.loads(buf) # depickle network message back to a message list
-            log.info("Received message: %s", str(msg))
+            log.debug("Received message: %s", str(msg))
 
             #
             # decode and respond to message
@@ -396,40 +391,35 @@ class serverThread(threading.Thread):
             client.close()
 
 
-
-
 if __name__ == "__main__":
 
     # Set up a logger
-    log_format  ='%(asctime)s %(message)s'
+    log_format  ='%(asctime)s %(levelname[:1])s %(message)s'
     log_datefmt ='%m/%d/%Y %H:%M:%S '
-    log_file_handler = logging.handlers.RotatingFileHandler(LOG_FILENAME, maxBytes=(256*1024), backupCount=3)    # 256K max file size, 4 files max
+    log_file_handler = logging.handlers.RotatingFileHandler(LOG_FILENAME, maxBytes=(256*1024), backupCount=3, level=logging.INFO)    # 256K max file size, 4 files max
     log_level   = logging.DEBUG
     logging.basicConfig(format=log_format, datefmt=log_datefmt, handlers=(logging.StreamHandler(), log_file_handler), level=log_level)
     log = logging.getLogger('')
 
-
     #
     # Node will either be a fencepost light or a flowmeter
-    # Fencepost lights are powered by 6-15 VDC
-    # Flowmeter is powered by 24 VAC
+    # host name will be one of 'flowmeter' or 'fencepost_back_1'/'fencepost_back_2'/'fencepost_front_1'/etc
     #
+
+    node_type = socket.gethostname().name.split('_')
+
+    if node_type == 'fencepost':
+        fpl_t = fpLightingThread()
+        fpl_t.start()
+    elif node_type == 'flowmeter':
+        flow_t = flowThread()
+        flow_t.start()
+    else:
+        node_type = 'unknown'
+    log.info("Node type is %s", node_type)
 
     vi_t = viThread()
     vi_t.start()
-
-    # Look at the input voltage to determine node type
-
-    (vin, cur) = vi_q.get(timeout=65)    # give thread time to sample
-    if vin < 20:  # fencepost node
-        fpl_t = fpLightingThread()
-        fpl_t.start()
-        node_type = "Fencepost"
-    else:           # flowmeter node
-        flow_t = flowThread()
-        flow_t.start()
-        node_type = "Flowmeter"
-    log.info("Input voltage = %.1f, node type is %s", vin, node_type)
 
     server_t = serverThread(node_type)
     server_t.start()
