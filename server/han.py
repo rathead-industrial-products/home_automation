@@ -167,7 +167,7 @@ class flowThread(threading.Thread):
 
             # very low flow rates are unrealistic, it is either a computed
             # ceiling or a leak
-            if igpm < MIN_FLOW_RATE:
+            if igpm < flowThread.MIN_FLOW_RATE:
                 igpm = 0
 
             #
@@ -184,7 +184,7 @@ class flowThread(threading.Thread):
                 g_flow_latest = (igpm, gallons)
 
             # first pulse in a long time
-            if flowing and (dt > LEAK_DETECT_DT):
+            if flowing and (dt > flowThread.LEAK_DETECT_DT):
                 log.info("Flow startup or Possible Leak")
 
             # log time and flow rate
@@ -420,9 +420,10 @@ class serverThread(threading.Thread):
 if __name__ == "__main__":
 
     # Set up a logger
-    log_format ='%(asctime)s %(levelname[:1])s %(message)s'
+    log_format ='%(asctime)s %(levelname)s %(message)s'
     log_datefmt ='%m/%d/%Y %H:%M:%S '
-    log_file_handler = logging.handlers.RotatingFileHandler(LOG_FILENAME, maxBytes=(256*1024), backupCount=3, level=logging.INFO)    # 256K max file size, 4 files max
+    log_file_handler = logging.handlers.RotatingFileHandler(LOG_FILENAME, maxBytes=(256*1024), backupCount=3)    # 256K max file size, 4 files max
+    log_file_handler.setLevel('INFO')
     log_level = logging.DEBUG
     logging.basicConfig(format=log_format, datefmt=log_datefmt, handlers=(logging.StreamHandler(), log_file_handler), level=log_level)
     log = logging.getLogger('')
@@ -432,7 +433,7 @@ if __name__ == "__main__":
     # host name will be one of 'flowmeter' or 'fencepost_back_1'/'fencepost_back_2'/'fencepost_front_1'/etc
     #
 
-    node_type = socket.gethostname().name.split('_')
+    node_type = socket.gethostname().split('_')[0]
 
     if node_type == 'fencepost':
         fpl_t = fpLightingThread()
