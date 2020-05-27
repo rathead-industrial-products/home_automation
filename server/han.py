@@ -159,11 +159,11 @@ class flowThread(threading.Thread):
             # determine instantaneous gpm assuming a pulse has been received
             # this is the ceiling of the current flow rate
             now = time.monotonic()
-            if last_pulse != 0:                 # avoid bogus value at startup
-                dt = now - last_pulse
-                igpm = 60 * (0.1/(dt)) # instantaneous GPM
+            if last_pulse == 0:                 # avoid bogus value at startup
+                dt = flowThread.LEAK_DETECT_DT - 1
             else:
-                igpm = 0.0
+                dt = now - last_pulse
+            igpm = 60 * (0.1/(dt)) # instantaneous GPM
 
             # very low flow rates are unrealistic, it is either a computed
             # ceiling or a leak
@@ -178,10 +178,11 @@ class flowThread(threading.Thread):
                 flowing = True                      # flowmeter activity detected
                 gallons += 0.1                      # increment totalizer
                 last_pulse = now                    # save to determine next interval
-
-            # update global variable with latest sample or computed ceiling
-            with g_flow_lock:
-                g_flow_latest = (igpm, gallons)
+                with g_flow_lock: g_flow_latest = (igpm, gallons)
+            else:
+                if g_flow_latest[0] < igpm:    # record lesser of last sample or ceiling
+                    igpm = g_flow_latest[0]
+                with g_flow_lock: g_flow_latest = (igpm, gallons)
 
             # first pulse in a long time
             if flowing and (dt > flowThread.LEAK_DETECT_DT):
@@ -397,16 +398,16 @@ class serverThread(threading.Thread):
                     vi_list.append(vi_q.get_nowait())
                 client.sendall(pickle.dumps(vi_list, pickle.HIGHEST_PROTOCOL))
 
-            elif ((node_type == "Fencepost") and ((msg[0] == "LIGHTING") or (msg[0] == "DISPLAY"))):
+            elif ((node_type == "fencepost") and ((msg[0] == "LIGHTING") or (msg[0] == "DISPLAY"))):
                 lighting_cmd_q.put(msg)
 
-            elif ((node_type == "Flowmeter") and (msg[0] == "FLOW_QUERY")):
+            elif ((node_type == "flowmeter") and (msg[0] == "FLOW_QUERY")):
                 # fetch global variable with latest flow sample
                 with g_flow_lock:
                     (gpm, gal) = g_flow_latest
                 client.sendall(pickle.dumps((gpm, gal), pickle.HIGHEST_PROTOCOL))
 
-            elif ((node_type == "Flowmeter") and (msg[0] == "FLOW_HISTORY")):
+            elif ((node_type == "flowmeter") and (msg[0] == "FLOW_HISTORY")):
                 with open('flowrecord.txt', 'r') as f:
                     history = f.readlines()
                     client.sendall(pickle.dumps(history.reverse(), pickle.HIGHEST_PROTOCOL))
@@ -427,6 +428,9 @@ if __name__ == "__main__":
     log_level = logging.DEBUG
     logging.basicConfig(format=log_format, datefmt=log_datefmt, handlers=(logging.StreamHandler(), log_file_handler), level=log_level)
     log = logging.getLogger('')
+
+    log.info("")
+    log.info("SERVER STARTING...")
 
     #
     # Node will either be a fencepost light or a flowmeter
