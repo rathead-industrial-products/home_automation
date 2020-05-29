@@ -34,7 +34,7 @@ import adafruit_bus_device.spi_device
 import random
 import fencepost_neopixel_driver as npdrvr
 
-LOG_FILENAME = "log.txt"
+LOG_FILENAME = "/home/pi/Home_Automation/home_automation/server/log.txt"     # running as a linux service requires an absolute path
 
 lighting_cmd_q = queue.Queue()          # unbounded, but will empty as soon as a record is added
 vi_q           = queue.Queue(10000)     # a week's worth of samples at 1 sample/min
