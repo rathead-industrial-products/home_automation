@@ -194,7 +194,7 @@ class flowThread(threading.Thread):
             if ((now != last_record_time) and flowing):   # record on the minute
                 record = time.strftime("%m/%d/%Y %H:%M")+"\t%.1f"%igpm+"\t%.0f"%gallons+'\n'
                 log.debug(record)
-                with open('flowrecord.txt', 'a') as f:
+                with open('/home/pi/Home_Automation/home_automation/server/flowrecord.txt', 'a') as f:
                     f.write(record)
                 last_record_time = now
                 flowing = False                     # reset flag
