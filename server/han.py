@@ -34,7 +34,9 @@ import adafruit_bus_device.spi_device
 import random
 import fencepost_neopixel_driver as npdrvr
 
-LOG_FILENAME = "/home/pi/Home_Automation/home_automation/server/log.txt"     # running as a linux service requires an absolute path
+LOG_FILE  = "/home/pi/Home_Automation/home_automation/server/log.txt"     # running as a linux service requires an absolute path
+FLOW_FILE = "/home/pi/Home_Automation/home_automation/server/flowrecord.txt"
+VI_FILE   = "/home/pi/Home_Automation/home_automation/server/vi.txt"
 
 lighting_cmd_q = queue.Queue()          # unbounded, but will empty as soon as a record is added
 vi_q           = queue.Queue(10000)     # a week's worth of samples at 1 sample/min
@@ -101,6 +103,12 @@ class viThread(threading.Thread):
             # update global variable with latest sample
             with g_vi_lock:
                 g_vi_latest = (vin, cur)
+
+            # add to log file
+            record = time.strftime("%m/%d/%Y %H:%M")+"\t%.1f"%vin+"\t%d"%cur+'\n'
+            log.debug(record)
+            with open(VI_FILE, 'a') as f:
+                f.write(record)
 
             time.sleep(viThread.SAMPLE_INTERVAL)
 
@@ -194,7 +202,7 @@ class flowThread(threading.Thread):
             if ((now != last_record_time) and flowing):   # record on the minute
                 record = time.strftime("%m/%d/%Y %H:%M")+"\t%.1f"%igpm+"\t%.0f"%gallons+'\n'
                 log.debug(record)
-                with open('/home/pi/Home_Automation/home_automation/server/flowrecord.txt', 'a') as f:
+                with open(FLOW_FILE, 'a') as f:
                     f.write(record)
                 last_record_time = now
                 flowing = False                     # reset flag
@@ -423,7 +431,7 @@ if __name__ == "__main__":
     # Set up a logger
     log_format ='%(asctime)s %(levelname)s %(message)s'
     log_datefmt ='%m/%d/%Y %H:%M:%S '
-    log_file_handler = logging.handlers.RotatingFileHandler(LOG_FILENAME, maxBytes=(256*1024), backupCount=3)    # 256K max file size, 4 files max
+    log_file_handler = logging.handlers.RotatingFileHandler(LOG_FILE, maxBytes=(256*1024), backupCount=3)    # 256K max file size, 4 files max
     log_file_handler.setLevel('INFO')
     log_level = logging.DEBUG
     logging.basicConfig(format=log_format, datefmt=log_datefmt, handlers=(logging.StreamHandler(), log_file_handler), level=log_level)
