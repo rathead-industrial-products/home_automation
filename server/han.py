@@ -1,4 +1,4 @@
-#!/usr/bin/python
+
 #
 
 """
@@ -36,7 +36,6 @@ import fencepost_neopixel_driver as npdrvr
 
 LOG_FILE  = "/home/pi/Home_Automation/home_automation/server/log.txt"     # running as a linux service requires an absolute path
 FLOW_FILE = "/home/pi/Home_Automation/home_automation/server/flowrecord.txt"
-VI_FILE   = "/home/pi/Home_Automation/home_automation/server/vi.txt"
 
 lighting_cmd_q = queue.Queue()          # unbounded, but will empty as soon as a record is added
 vi_q           = queue.Queue(10000)     # a week's worth of samples at 1 sample/min
@@ -107,8 +106,6 @@ class viThread(threading.Thread):
             # add to log file
             record = time.strftime("%m/%d/%Y %H:%M")+"\t%.1f"%vin+"\t%d"%cur+'\n'
             log.debug(record)
-            with open(VI_FILE, 'a') as f:
-                f.write(record)
 
             time.sleep(viThread.SAMPLE_INTERVAL)
 
