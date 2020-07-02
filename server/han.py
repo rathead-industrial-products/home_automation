@@ -48,6 +48,54 @@ g_vi_lock      = threading.Lock()
 g_flow_latest  = (1, 2)                 # global variable containing latest (gpm, gal) sample
 g_flow_lock    = threading.Lock()
 
+
+class audioThread(threading.Thread):
+    #
+    # amixer controls the volume
+    #   > amixer
+    #       Simple mixer control 'PCM',0
+    #       Capabilities: volume
+    #       Playback channels: Front Left - Front Right
+    #       Capture channels: Front Left - Front Right
+    #       Limits: 0 - 255
+    #       Front Left: 128 [50%]
+    #       Front Right: 128 [50%]
+    #   > amixer controls
+    #       numid=1,iface=MIXER,name='PCM'
+    #   > amixer cget numid=1
+    #       numid=1,iface=MIXER,name='PCM'
+    #       ; type=INTEGER,access=rw---RW-,values=2,min=0,max=255,step=0
+    #       : values=128,128
+    #       | dBscale-min=-51.00dB,step=0.20dB,mute=0
+    #   > amixer cset numid=1 256,256
+    #   > amixer cset numid=1 50%,50%
+    #
+    # alsa is the audio driver
+    #
+    # omxplayer for .mp3 files
+    #   omxplayer -o alsa audio/filename.mp3 > /dev/null
+    #
+    # aplay for .wav files
+    #   aplay audio/filename.wav
+    #
+
+    SAMPLE_INTERVAL = 1.0     # sample every second
+
+    def __init__(self):
+        threading.Thread.__init__(self)
+        self.daemon = True
+
+    def run(self):
+        log.info("audioThread running")
+
+        # Set up
+
+
+        while True:
+            os.system("omxplayer -o alsa audio/intruder_alert.mp3 > /dev/null")
+            time.sleep(audioThread.SAMPLE_INTERVAL)
+
+
 class viThread(threading.Thread):
     SAMPLE_INTERVAL = 60    # sample voltage and current once every minute
     READ_VIN = 0xD0
