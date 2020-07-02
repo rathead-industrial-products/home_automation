@@ -502,8 +502,10 @@ if __name__ == "__main__":
     node_type = socket.gethostname().split('-')[0]
 
     if node_type == 'fencepost':
-        fpl_t = fpLightingThread()
+        fpl_t   = fpLightingThread()
+        audio_t = audioThread()
         fpl_t.start()
+        audio_t.start()
     elif node_type == 'flowmeter':
         flow_t = flowThread()
         flow_t.start()
