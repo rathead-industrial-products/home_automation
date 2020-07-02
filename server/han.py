@@ -79,7 +79,7 @@ class audioThread(threading.Thread):
     #   aplay audio/filename.wav
     #
 
-    SAMPLE_INTERVAL = 1.0     # sample every second
+    SAMPLE_INTERVAL = 10.0     # sample every second
 
     def __init__(self):
         threading.Thread.__init__(self)
@@ -92,7 +92,7 @@ class audioThread(threading.Thread):
 
 
         while True:
-            os.system("omxplayer -o alsa audio/intruder_alert.mp3 > /dev/null")
+            os.system("omxplayer -o alsa --no-keys audio/intruder_alert.mp3 > /dev/null 2>&1 &")
             time.sleep(audioThread.SAMPLE_INTERVAL)
 
 
