@@ -460,7 +460,7 @@ if __name__ == "__main__":
         flow_t = flowThread()
         flow_t.start()
     else:
-        node_type = 'unknown'
+        node_type = 'unknown: ' + node_type
     log.info("Node type is %s", node_type)
 
     vi_t = viThread()
