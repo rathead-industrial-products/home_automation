@@ -7,12 +7,14 @@ Universal code base for Raspberry Pi based home automation nodes.
 
 1. Fencepost Lighting Controller
 2. Hunter Flow Meter Monitor
-3. Voltage/Current Sampler
-4. TCP/IP Socket Server
+3. I2S DAC and Power Amplifier
+4. Voltage/Current Sampler
+5. TCP/IP Socket Server
 
 The nodes have a Pi Bonnet that contains a power supply, an RS-422
-driver for daisy-chaining LED strings, and an I2C ADC that monitors
-the supply voltage and the load current (at 5V) of the node.
+driver for daisy-chaining LED strings, an I2S DAC and power amp to
+drive a speaker, and an I2C ADC that monitors the supply voltage
+and the load current (at 5V) of the node.
 
 The Flow meter repurposes the LED driver GPIO to interface to the
 reed relay interruptor in the flow sensor.
@@ -203,7 +205,7 @@ class flowThread(threading.Thread):
                     f.write(record)
                 last_record_time = now
                 flowing = False                     # reset flag
-                
+
             time.sleep(flowThread.SAMPLE_INTERVAL)
 
 
@@ -245,6 +247,9 @@ class fpLightingThread(threading.Thread):
 
     def run(self):
         log.info("fpLightingThread running")
+
+        # set LED string to default condition
+        npdrvr.set_all_pixels(self.color, self.intensity)
 
         while True:
 
@@ -397,6 +402,10 @@ class serverThread(threading.Thread):
                     (vin, cur) = g_vi_latest
                 client.sendall(pickle.dumps((vin, cur), pickle.HIGHEST_PROTOCOL))
 
+            elif msg[0] == "SOUND":
+                # get mp3 file and drive output
+                pass
+
             elif msg[0] == "VI_HISTORY":
                 vi_list = []
                 if not vi_q.empty():
@@ -439,10 +448,10 @@ if __name__ == "__main__":
 
     #
     # Node will either be a fencepost light or a flowmeter
-    # host name will be one of 'flowmeter' or 'fencepost_back_1'/'fencepost_back_2'/'fencepost_front_1'/etc
+    # host name will be one of 'flowmeter' or 'fencepost-back-1'/'fencepost-back-2'/'fencepost-front-1'/etc
     #
 
-    node_type = socket.gethostname().split('_')[0]
+    node_type = socket.gethostname().split('-')[0]
 
     if node_type == 'fencepost':
         fpl_t = fpLightingThread()
