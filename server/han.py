@@ -196,16 +196,17 @@ class flowThread(threading.Thread):
     LEAK_DETECT_DT  = 300       # seconds between pulses indicates possible leak
 
     # sprinker zones mapped to GPIO
-    ZONE_MAP = { "flow_sns" : 12,
-                 "zone_1"   : 18,
+    ZONE_MAP = { "led"      : 27,
+                 "flow_sns" : 4,
+                 "zone_1"   : 17,
                  "zone_2"   : 22,
                  "zone_3"   : 23,
                  "zone_4"   : 24,
                  "zone_5"   : 25,
                  "zone_6"   : 5,
-                 "zone_7"   : 6,
-                 "zone_8"   : 13,
-                 "zone_9"   : 19,
+                 "zone_7"   : 12,
+                 "zone_8"   : 6,
+                 "zone_9"   : 13,
                  "zone_10"  : 16,
                  "zone_11"  : 26,
                  "zone_12"  : 20 }
@@ -225,7 +226,10 @@ class flowThread(threading.Thread):
         for zone in ZONE_MAP.keys():
             io = digitalio.DigitalInOut(ZONE_MAP[zone]) # create pin object
             ZONE_MAP[zone] = io # save in dict in place of io number
-            io.direction = digitalio.Direction.INPUT
+            if zone is "led":
+                io.direction = digitalio.Direction.OUTPUT
+            else:
+                io.direction = digitalio.Direction.INPUT
 
         gallons    = 0.0
         igpm       = 0.0
@@ -278,9 +282,12 @@ class flowThread(threading.Thread):
                 last_record_time = now
                 flowing = False                     # reset flag
 
+            # illuminate LED if flowing
+            ZONE_MAP["led"].value = flowing
+
             # monitor zone control lines
             g_active_zone = None
-            for zone in ZONE_MAP.keys()[1:]:    # ignore flowmeter
+            for zone in ZONE_MAP.keys()[2:]:    # ignore led and flowmeter
                 if ZONE_MAP[zone].value:
                     if g_active_zone != None:
                         log.warning("More than one zone active. %s, %s", (active_zone, zone) )
