@@ -17,7 +17,8 @@ drive a speaker, and an I2C ADC that monitors the supply voltage
 and the load current (at 5V) of the node.
 
 The Flow meter repurposes the LED driver GPIO to interface to the
-reed relay interruptor in the flow sensor.
+reed relay interruptor in the flow sensor. It also monitors the
+control lines to the solenoids and can detect when a zone is active.
 
 """
 
@@ -47,6 +48,7 @@ g_vi_lock      = threading.Lock()
 
 g_flow_latest  = (1, 2)                 # global variable containing latest (gpm, gal) sample
 g_flow_lock    = threading.Lock()
+g_active_zone  = None                   # global variable containing currently active (ON) sprinkler zone
 
 
 class audioThread(threading.Thread):
@@ -184,10 +186,29 @@ class flowThread(threading.Thread):
     #   A logfile records cumulative gallons every minute when water is flowing.
     #   Each record is a line in the file of format <timestamp> cumgal.x gpm.x
     #
+    #
+    #   The power line to each solenoid from the sprinkler controller is monitored
+    #   in order to sense when a sprinkler zone is active.
+    #
 
     SAMPLE_INTERVAL = 0.050     # sample flow pulse every 50 ms
     MIN_FLOW_RATE   = 0.35      # gpm, flow rates below this are rounded to zero
     LEAK_DETECT_DT  = 300       # seconds between pulses indicates possible leak
+
+    # sprinker zones mapped to GPIO
+    ZONE_MAP = { "flow_sns" : 12,
+                 "zone_1"   : 18,
+                 "zone_2"   : 22,
+                 "zone_3"   : 23,
+                 "zone_4"   : 24,
+                 "zone_5"   : 25,
+                 "zone_6"   : 5,
+                 "zone_7"   : 6,
+                 "zone_8"   : 13,
+                 "zone_9"   : 19,
+                 "zone_10"  : 16,
+                 "zone_11"  : 26,
+                 "zone_12"  : 20 }
 
     def __init__(self):
         threading.Thread.__init__(self)
@@ -196,12 +217,15 @@ class flowThread(threading.Thread):
     def run(self):
         global g_flow_latest
         global g_flow_lock
+        global g_active_zone
 
         log.info("flowThread running")
 
-        flow_meter = digitalio.DigitalInOut(board.D18)
-        flow_meter.direction = digitalio.Direction.INPUT
-        flow_meter.pull = digitalio.Pull.UP
+        # iniitalize gpio, replacing gpio number with pin object
+        for zone in ZONE_MAP.keys():
+            io = digitalio.DigitalInOut(ZONE_MAP[zone]) # create pin object
+            ZONE_MAP[zone] = io # save in dict in place of io number
+            io.direction = digitalio.Direction.INPUT
 
         gallons    = 0.0
         igpm       = 0.0
@@ -228,11 +252,11 @@ class flowThread(threading.Thread):
             #
             # Pulse received, so computed igpm (ceiling) is actual igpm
             #
-            current_state = flow_meter.value        # pulse line is high or low
-            if (not last_state) and current_state:  # on rising edge of pulse
-                flowing = True                      # flowmeter activity detected
-                gallons += 0.1                      # increment totalizer
-                last_pulse = now                    # save to determine next interval
+            current_state = ZONE_MAP["flow_sns"].value  # is pulse line high or low
+            if (not last_state) and current_state:      # on rising edge of pulse
+                flowing = True                          # flowmeter activity detected
+                gallons += 0.1                          # increment totalizer
+                last_pulse = now                        # save to determine next interval
                 with g_flow_lock: g_flow_latest = (igpm, gallons)
             else:
                 if g_flow_latest[0] < igpm:    # record lesser of last sample or ceiling
@@ -253,6 +277,14 @@ class flowThread(threading.Thread):
                     f.write(record)
                 last_record_time = now
                 flowing = False                     # reset flag
+
+            # monitor zone control lines
+            g_active_zone = None
+            for zone in ZONE_MAP.keys()[1:]:    # ignore flowmeter
+                if ZONE_MAP[zone].value:
+                    if g_active_zone != None:
+                        log.warning("More than one zone active. %s, %s", (active_zone, zone) )
+                    g_active_zone = zone
 
             time.sleep(flowThread.SAMPLE_INTERVAL)
 
