@@ -47,8 +47,8 @@ g_vi_latest    = (0, 0)                 # global variable containing latest (v, 
 g_vi_lock      = threading.Lock()
 
 g_flow_latest  = (1, 2)                 # global variable containing latest (gpm, gal) sample
+g_active_zone  = "Off"                  # global variable containing currently active (ON) sprinkler zone
 g_flow_lock    = threading.Lock()
-g_active_zone  = None                   # global variable containing currently active (ON) sprinkler zone
 
 
 class audioThread(threading.Thread):
@@ -271,27 +271,29 @@ class flowThread(threading.Thread):
             if flowing and (dt > flowThread.LEAK_DETECT_DT):
                 log.info("Flow startup or Possible Leak")
 
-            # log time and flow rate
+            # log time, flow rate, and zone activation
             last_state = current_state
             now = int(time.strftime("%M"))
             if ((now != last_record_time) and flowing):   # record on the minute
-                record = time.strftime("%m/%d/%Y %H:%M")+"\t%.1f"%igpm+"\t%.0f"%gallons+'\n'
+                record = time.strftime("%m/%d/%Y %H:%M")+"\t%.1f"%igpm+"\t%.0f"%gallons+"\t%s"%g_active_zone+'\n'
                 log.debug(record)
                 with open(FLOW_FILE, 'a') as f:
                     f.write(record)
                 last_record_time = now
-                flowing = False                     # reset flag
+                flowing = False                     # reset flag after logging to start next minute anew
 
-            # illuminate LED if flowing
-            ZONE_MAP["led"].value = flowing
+            # pulse the LED proportionally to the flow rate sensor
+            # with the same 60/40 on/off duty cycle
+            # only flash when flowing so it doesn't potentially get stuck on when sensor stops
+            ZONE_MAP["led"].value = current_state and flowing
 
             # monitor zone control lines
-            g_active_zone = None
+            g_active_zone = "Off"
             for zone in ZONE_MAP.keys()[2:]:    # ignore led and flowmeter
                 if ZONE_MAP[zone].value:
-                    if g_active_zone != None:
-                        log.warning("More than one zone active. %s, %s", (active_zone, zone) )
-                    g_active_zone = zone
+                    if g_active_zone != "Off":
+                        log.warning("More than one zone active. %s, %s", (g_active_zone, zone) )
+                    with g_flow_lock: g_active_zone = zone
 
             time.sleep(flowThread.SAMPLE_INTERVAL)
 
@@ -503,10 +505,11 @@ class serverThread(threading.Thread):
                 lighting_cmd_q.put(msg)
 
             elif ((node_type == "flowmeter") and (msg[0] == "FLOW_QUERY")):
-                # fetch global variable with latest flow sample
+                # fetch global variable with latest flow sample and zone activation
                 with g_flow_lock:
                     (gpm, gal) = g_flow_latest
-                client.sendall(pickle.dumps((gpm, gal), pickle.HIGHEST_PROTOCOL))
+                    zone = g_active_zone
+                client.sendall(pickle.dumps((gpm, gal, zone), pickle.HIGHEST_PROTOCOL))
 
             elif ((node_type == "flowmeter") and (msg[0] == "FLOW_HISTORY")):
                 with open('flowrecord.txt', 'r') as f:
