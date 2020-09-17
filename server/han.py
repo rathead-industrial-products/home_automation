@@ -190,6 +190,11 @@ class flowThread(threading.Thread):
     #   The power line to each solenoid from the sprinkler controller is monitored
     #   in order to sense when a sprinkler zone is active.
     #
+    #   The pump power is active whenever any zone is active.
+    #
+    #   The LED is flashed at a proportional rate to water flow, or slowly if
+    #   there is no flow.
+    #
 
     SAMPLE_INTERVAL = 0.050     # sample flow pulse every 50 ms
     MIN_FLOW_RATE   = 0.35      # gpm, flow rates below this are rounded to zero
@@ -198,18 +203,18 @@ class flowThread(threading.Thread):
     # sprinker zones mapped to GPIO
     ZONE_MAP = { "led"      : 27,
                  "flow_sns" : 4,
-                 "zone_1"   : 17,
-                 "zone_2"   : 22,
-                 "zone_3"   : 23,
-                 "zone_4"   : 24,
-                 "zone_5"   : 25,
-                 "zone_6"   : 5,
-                 "zone_7"   : 12,
-                 "zone_8"   : 6,
-                 "zone_9"   : 13,
-                 "zone_10"  : 16,
-                 "zone_11"  : 26,
-                 "zone_12"  : 20 }
+                 "pump"     : 17,
+                 "zone_1"   : 22,
+                 "zone_2"   : 23,
+                 "zone_3"   : 24,
+                 "zone_4"   : 25,
+                 "zone_5"   : 5,
+                 "zone_6"   : 12,
+                 "zone_7"   : 6,
+                 "zone_8"   : 13,
+                 "zone_9"   : 16,
+                 "zone_10"  : 26,
+                 "zone_11"  : 20 }
 
     def __init__(self):
         threading.Thread.__init__(self)
@@ -284,12 +289,15 @@ class flowThread(threading.Thread):
 
             # pulse the LED proportionally to the flow rate sensor
             # with the same 60/40 on/off duty cycle
-            # only flash when flowing so it doesn't potentially get stuck on when sensor stops
-            ZONE_MAP["led"].value = current_state and flowing
+            # flash at 1 Hz if there is no flow
+            if flowing:
+                ZONE_MAP["led"].value = current_state
+            else:
+                ZONE_MAP["led"].value = int(now) % 2
 
             # monitor zone control lines
             g_active_zone = "Off"
-            for zone in ZONE_MAP.keys()[2:]:    # ignore led and flowmeter
+            for zone in ZONE_MAP.keys()[3:]:    # ignore led, flowmeter, and pump
                 if ZONE_MAP[zone].value:
                     if g_active_zone != "Off":
                         log.warning("More than one zone active. %s, %s", (g_active_zone, zone) )
