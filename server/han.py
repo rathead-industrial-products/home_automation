@@ -201,20 +201,20 @@ class flowThread(threading.Thread):
     LEAK_DETECT_DT  = 300       # seconds between pulses indicates possible leak
 
     # sprinker zones mapped to GPIO
-    ZONE_MAP = { "led"      : 27,
-                 "flow_sns" : 4,
-                 "pump"     : 17,
-                 "zone_1"   : 22,
-                 "zone_2"   : 23,
-                 "zone_3"   : 24,
-                 "zone_4"   : 25,
-                 "zone_5"   : 5,
-                 "zone_6"   : 12,
-                 "zone_7"   : 6,
-                 "zone_8"   : 13,
-                 "zone_9"   : 16,
-                 "zone_10"  : 26,
-                 "zone_11"  : 20 }
+    ZONE_MAP = { "led"      : board.D27,
+                 "flow_sns" : board.D4,
+                 "pump"     : board.D17,
+                 "zone_1"   : board.D22,
+                 "zone_2"   : board.D23,
+                 "zone_3"   : board.D24,
+                 "zone_4"   : board.D25,
+                 "zone_5"   : board.D5,
+                 "zone_6"   : board.D12,
+                 "zone_7"   : board.D6,
+                 "zone_8"   : board.D13,
+                 "zone_9"   : board.D16,
+                 "zone_10"  : board.D26,
+                 "zone_11"  : board.D20 }
 
     def __init__(self):
         threading.Thread.__init__(self)
@@ -228,9 +228,9 @@ class flowThread(threading.Thread):
         log.info("flowThread running")
 
         # iniitalize gpio, replacing gpio number with pin object
-        for zone in ZONE_MAP.keys():
-            io = digitalio.DigitalInOut(ZONE_MAP[zone]) # create pin object
-            ZONE_MAP[zone] = io # save in dict in place of io number
+        for zone in flowThread.ZONE_MAP.keys():
+            io = digitalio.DigitalInOut(flowThread.ZONE_MAP[zone]) # create pin object
+            flowThread.ZONE_MAP[zone] = io # save in dict in place of io number
             if zone is "led":
                 io.direction = digitalio.Direction.OUTPUT
             else:
@@ -261,7 +261,7 @@ class flowThread(threading.Thread):
             #
             # Pulse received, so computed igpm (ceiling) is actual igpm
             #
-            current_state = ZONE_MAP["flow_sns"].value  # is pulse line high or low
+            current_state = flowThread.ZONE_MAP["flow_sns"].value  # is pulse line high or low
             if (not last_state) and current_state:      # on rising edge of pulse
                 flowing = True                          # flowmeter activity detected
                 gallons += 0.1                          # increment totalizer
@@ -271,6 +271,14 @@ class flowThread(threading.Thread):
                 if g_flow_latest[0] < igpm:    # record lesser of last sample or ceiling
                     igpm = g_flow_latest[0]
                 with g_flow_lock: g_flow_latest = (igpm, gallons)
+
+            # pulse the LED proportionally to the flow rate sensor
+            # with the same 60/40 on/off duty cycle
+            # flash at 1 Hz if there is no flow
+            if flowing:
+                flowThread.ZONE_MAP["led"].value = current_state
+            else:
+                flowThread.ZONE_MAP["led"].value = int(now) % 2
 
             # first pulse in a long time
             if flowing and (dt > flowThread.LEAK_DETECT_DT):
@@ -287,18 +295,10 @@ class flowThread(threading.Thread):
                 last_record_time = now
                 flowing = False                     # reset flag after logging to start next minute anew
 
-            # pulse the LED proportionally to the flow rate sensor
-            # with the same 60/40 on/off duty cycle
-            # flash at 1 Hz if there is no flow
-            if flowing:
-                ZONE_MAP["led"].value = current_state
-            else:
-                ZONE_MAP["led"].value = int(now) % 2
-
             # monitor zone control lines
             g_active_zone = "Off"
-            for zone in ZONE_MAP.keys()[3:]:    # ignore led, flowmeter, and pump
-                if ZONE_MAP[zone].value:
+            for zone in list(flowThread.ZONE_MAP.keys())[3:]:    # ignore led, flowmeter, and pump
+                if flowThread.ZONE_MAP[zone].value:
                     if g_active_zone != "Off":
                         log.warning("More than one zone active. %s, %s", (g_active_zone, zone) )
                     with g_flow_lock: g_active_zone = zone
