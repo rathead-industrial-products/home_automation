@@ -1,0 +1,52 @@
+IP Addresses:
+Home automation devices are in the range 200-254
+All devices have assigned IP addresses
+
+Magic Mirror:		200	magicmirror		pi:mitchmirror  <can only ssh from local network or mindmentum.com>
+
+Sprinkler System
+Flow Meter:		201	flowmeter		pi:raspberry
+
+Back Yard
+Fencepost 1-10:		202	fencepost_back1		pi:raspberry
+Fenceposts 11-20:	203	fencepost_back2		pi:raspberry
+
+Front Yard
+Lidar:			220	lidar			pi:raspberry
+Fenceposts: 		221	fencepost_front1	pi:raspberry
+
+
+Application
+All devices run a server listening for connection requests on port 6445
+
+Message Format
+Type (LIGHTING)
+Fencepost Number
+Orientation (N,S,E,W)
+Color
+Brightness
+
+Type (DISPLAY)
+Color (RED, GREEN, BLUE, WHITE, RAINBOW)
+Intensity (LOW, MEDIUM, HIGH)
+Pattern (STEADY, STROBE, THROB, MARCH, TWINKLE)
+	THROB = slowly increase from 0 to intensity, then slowly decrease back to 0
+	TWINKLE = Randomly flash (off to intensity) to simulate stars twinkling
+
+Type (VI_QUERY)
+return most recent (V,I)
+
+Type (VI_HISTORY)
+return history list, most recent first
+
+Type (FLOW_QUERY)
+return most recent (GPM, CUM_GAL)
+
+Type (FLOW_HISTORY)
+return history list, most recent first
+
+TYPE (PLAY_AUDIO)
+<wav file> ?
+
+
+
