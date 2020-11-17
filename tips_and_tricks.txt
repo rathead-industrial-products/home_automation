@@ -1,0 +1,15 @@
+MAGIC MIRROR
+------------
+
+--- config.js ---
+After any changes
+npm run config:check
+
+To allow outside http access (not just from localhost):
+config.js
+var config = {
+    address: "0.0.0.0", 
+    port: 8080,
+    ipWhitelist: [],
+    
+    
