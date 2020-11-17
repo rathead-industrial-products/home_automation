@@ -4,6 +4,7 @@ MAGIC MIRROR
 --- config.js ---
 After any changes
 npm run config:check
+pm2 restart mm
 
 To allow outside http access:
 config.js
