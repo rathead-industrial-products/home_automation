@@ -1,4 +1,4 @@
-#!/usr/bin/python
+
 #
 
 """
@@ -7,15 +7,18 @@ Universal code base for Raspberry Pi based home automation nodes.
 
 1. Fencepost Lighting Controller
 2. Hunter Flow Meter Monitor
-3. Voltage/Current Sampler
-4. TCP/IP Socket Server
+3. I2S DAC and Power Amplifier
+4. Voltage/Current Sampler
+5. TCP/IP Socket Server
 
 The nodes have a Pi Bonnet that contains a power supply, an RS-422
-driver for daisy-chaining LED strings, and an I2C ADC that monitors
-the supply voltage and the load current (at 5V) of the node.
+driver for daisy-chaining LED strings, an I2S DAC and power amp to
+drive a speaker, and an I2C ADC that monitors the supply voltage
+and the load current (at 5V) of the node.
 
 The Flow meter repurposes the LED driver GPIO to interface to the
-reed relay interruptor in the flow sensor.
+reed relay interruptor in the flow sensor. It also monitors the
+control lines to the solenoids and can detect when a zone is active.
 
 """
 
@@ -47,7 +50,56 @@ g_vi_latest    = (0, 0)                 # global variable containing latest (v, 
 g_vi_lock      = threading.Lock()
 
 g_flow_latest  = (1, 2)                 # global variable containing latest (gpm, gal) sample
+g_active_zone  = "Off"                  # global variable containing currently active (ON) sprinkler zone
 g_flow_lock    = threading.Lock()
+
+
+class audioThread(threading.Thread):
+    #
+    # amixer controls the volume
+    #   > amixer
+    #       Simple mixer control 'PCM',0
+    #       Capabilities: volume
+    #       Playback channels: Front Left - Front Right
+    #       Capture channels: Front Left - Front Right
+    #       Limits: 0 - 255
+    #       Front Left: 128 [50%]
+    #       Front Right: 128 [50%]
+    #   > amixer controls
+    #       numid=1,iface=MIXER,name='PCM'
+    #   > amixer cget numid=1
+    #       numid=1,iface=MIXER,name='PCM'
+    #       ; type=INTEGER,access=rw---RW-,values=2,min=0,max=255,step=0
+    #       : values=128,128
+    #       | dBscale-min=-51.00dB,step=0.20dB,mute=0
+    #   > amixer cset numid=1 256,256
+    #   > amixer cset numid=1 50%,50%
+    #
+    # alsa is the audio driver
+    #
+    # omxplayer for .mp3 files
+    #   omxplayer -o alsa audio/filename.mp3 > /dev/null
+    #
+    # aplay for .wav files
+    #   aplay audio/filename.wav
+    #
+
+    SAMPLE_INTERVAL = 10.0     # sample every second
+
+    def __init__(self):
+        threading.Thread.__init__(self)
+        self.daemon = True
+
+    def run(self):
+        log.info("audioThread running")
+
+        # Set up
+
+
+        while True:
+            os.system("omxplayer -o alsa --no-keys audio/intruder_alert.mp3 > /dev/null 2>&1 &")
+            time.sleep(audioThread.SAMPLE_INTERVAL)
+
 
 class viThread(threading.Thread):
     SAMPLE_INTERVAL = 60    # sample voltage and current once every minute
@@ -139,10 +191,35 @@ class flowThread(threading.Thread):
     #   A logfile records cumulative gallons every minute when water is flowing.
     #   Each record is a line in the file of format <timestamp> cumgal.x gpm.x
     #
+    #
+    #   The power line to each solenoid from the sprinkler controller is monitored
+    #   in order to sense when a sprinkler zone is active.
+    #
+    #   The pump power is active whenever any zone is active.
+    #
+    #   The LED is flashed at a proportional rate to water flow, or slowly if
+    #   there is no flow.
+    #
 
     SAMPLE_INTERVAL = 0.050     # sample flow pulse every 50 ms
     MIN_FLOW_RATE   = 0.35      # gpm, flow rates below this are rounded to zero
     LEAK_DETECT_DT  = 300       # seconds between pulses indicates possible leak
+
+    # sprinker zones mapped to GPIO
+    ZONE_MAP = { "led"      : board.D27,
+                 "flow_sns" : board.D4,
+                 "pump"     : board.D17,
+                 "zone_1"   : board.D22,
+                 "zone_2"   : board.D23,
+                 "zone_3"   : board.D24,
+                 "zone_4"   : board.D25,
+                 "zone_5"   : board.D5,
+                 "zone_6"   : board.D12,
+                 "zone_7"   : board.D6,
+                 "zone_8"   : board.D13,
+                 "zone_9"   : board.D16,
+                 "zone_10"  : board.D26,
+                 "zone_11"  : board.D20 }
 
     def __init__(self):
         threading.Thread.__init__(self)
@@ -151,12 +228,18 @@ class flowThread(threading.Thread):
     def run(self):
         global g_flow_latest
         global g_flow_lock
+        global g_active_zone
 
         server_log.info("flowThread running")
 
-        flow_meter = digitalio.DigitalInOut(board.D18)
-        flow_meter.direction = digitalio.Direction.INPUT
-        flow_meter.pull = digitalio.Pull.UP
+        # iniitalize gpio, replacing gpio number with pin object
+        for zone in flowThread.ZONE_MAP.keys():
+            io = digitalio.DigitalInOut(flowThread.ZONE_MAP[zone]) # create pin object
+            flowThread.ZONE_MAP[zone] = io # save in dict in place of io number
+            if zone is "led":
+                io.direction = digitalio.Direction.OUTPUT
+            else:
+                io.direction = digitalio.Direction.INPUT
 
         gallons    = 0.0
         igpm       = 0.0
@@ -183,32 +266,50 @@ class flowThread(threading.Thread):
             #
             # Pulse received, so computed igpm (ceiling) is actual igpm
             #
-            current_state = flow_meter.value        # pulse line is high or low
-            if (not last_state) and current_state:  # on rising edge of pulse
-                flowing = True                      # flowmeter activity detected
-                gallons += 0.1                      # increment totalizer
-                last_pulse = now                    # save to determine next interval
+            current_state = flowThread.ZONE_MAP["flow_sns"].value  # is pulse line high or low
+            if (not last_state) and current_state:      # on rising edge of pulse
+                flowing = True                          # flowmeter activity detected
+                gallons += 0.1                          # increment totalizer
+                last_pulse = now                        # save to determine next interval
                 with g_flow_lock: g_flow_latest = (igpm, gallons)
             else:
                 if g_flow_latest[0] < igpm:    # record lesser of last sample or ceiling
                     igpm = g_flow_latest[0]
                 with g_flow_lock: g_flow_latest = (igpm, gallons)
 
+            # pulse the LED proportionally to the flow rate sensor
+            # with the same 60/40 on/off duty cycle
+            # flash at 1 Hz if there is no flow
+            if flowing:
+                flowThread.ZONE_MAP["led"].value = current_state
+            else:
+                flowThread.ZONE_MAP["led"].value = int(now) % 2
+
             # first pulse in a long time
             if flowing and (dt > flowThread.LEAK_DETECT_DT):
                 server_log.info("Flow startup or Possible Leak")
 
-            # log time and flow rate
+            # log time, flow rate, and zone activation
             last_state = current_state
             now = int(time.strftime("%M"))
             if ((now != last_record_time) and flowing):   # record on the minute
                 record = time.strftime("%m/%d/%Y %H:%M")+"\t%.1f"%igpm+"\t%.0f"%gallons+'\n'
                 server_log.debug(record)
+                record = time.strftime("%m/%d/%Y %H:%M")+"\t%.1f"%igpm+"\t%.0f"%gallons+"\t%s"%g_active_zone+'\n'
+                log.debug(record)
                 with open(FLOW_FILE, 'a') as f:
                     f.write(record)
                 last_record_time = now
-                flowing = False                     # reset flag
-                
+                flowing = False                     # reset flag after logging to start next minute anew
+
+            # monitor zone control lines
+            g_active_zone = "Off"
+            for zone in list(flowThread.ZONE_MAP.keys())[3:]:    # ignore led, flowmeter, and pump
+                if flowThread.ZONE_MAP[zone].value:
+                    if g_active_zone != "Off":
+                        log.warning("More than one zone active. %s, %s", (g_active_zone, zone) )
+                    with g_flow_lock: g_active_zone = zone
+
             time.sleep(flowThread.SAMPLE_INTERVAL)
 
 
@@ -250,6 +351,9 @@ class fpLightingThread(threading.Thread):
 
     def run(self):
         server_log.info("fpLightingThread running")
+
+        # set LED string to default condition
+        npdrvr.set_all_pixels(self.color, self.intensity)
 
         while True:
 
@@ -402,6 +506,10 @@ class serverThread(threading.Thread):
                     (vin, cur) = g_vi_latest
                 client.sendall(pickle.dumps((vin, cur), pickle.HIGHEST_PROTOCOL))
 
+            elif msg[0] == "SOUND":
+                # get mp3 file and drive output
+                pass
+
             elif msg[0] == "VI_HISTORY":
                 vi_list = []
                 if not vi_q.empty():
@@ -412,10 +520,11 @@ class serverThread(threading.Thread):
                 lighting_cmd_q.put(msg)
 
             elif ((node_type == "flowmeter") and (msg[0] == "FLOW_QUERY")):
-                # fetch global variable with latest flow sample
+                # fetch global variable with latest flow sample and zone activation
                 with g_flow_lock:
                     (gpm, gal) = g_flow_latest
-                client.sendall(pickle.dumps((gpm, gal), pickle.HIGHEST_PROTOCOL))
+                    zone = g_active_zone
+                client.sendall(pickle.dumps((gpm, gal, zone), pickle.HIGHEST_PROTOCOL))
 
             elif ((node_type == "flowmeter") and (msg[0] == "FLOW_HISTORY")):
                 with open('flowrecord.txt', 'r') as f:
@@ -466,19 +575,21 @@ if __name__ == "__main__":
 
     #
     # Node will either be a fencepost light or a flowmeter
-    # host name will be one of 'flowmeter' or 'fencepost_back_1'/'fencepost_back_2'/'fencepost_front_1'/etc
+    # host name will be one of 'flowmeter' or 'fencepost-back-1'/'fencepost-back-2'/'fencepost-front-1'/etc
     #
 
-    node_type = socket.gethostname().split('_')[0]
+    node_type = socket.gethostname().split('-')[0]
 
     if node_type == 'fencepost':
-        fpl_t = fpLightingThread()
+        fpl_t   = fpLightingThread()
+        audio_t = audioThread()
         fpl_t.start()
+        audio_t.start()
     elif node_type == 'flowmeter':
         flow_t = flowThread()
         flow_t.start()
     else:
-        node_type = 'unknown'
+        node_type = 'unknown: ' + node_type
     log.info("Node type is %s", node_type)
 
     vi_t = viThread()

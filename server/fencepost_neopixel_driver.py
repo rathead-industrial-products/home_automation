@@ -1,4 +1,4 @@
-#!/usr/bin/python
+
 #
 
 """
@@ -71,7 +71,7 @@ CONFIGURATION = ( ( 1, 1, 1  ),
 
 
 # Raspberry pi
-pixel_pin = board.D18
+pixel_pin = board.D12
 
 # The number of NeoPixels
 num_pixels = N_FENCEPOSTS * N_LEDS_PER_POST
