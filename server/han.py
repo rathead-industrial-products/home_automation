@@ -34,9 +34,11 @@ import adafruit_bus_device.spi_device
 import random
 import fencepost_neopixel_driver as npdrvr
 
-LOG_FILE  = "/home/pi/Home_Automation/home_automation/server/log.txt"     # running as a linux service requires an absolute path
-FLOW_FILE = "/home/pi/Home_Automation/home_automation/server/flowrecord.txt"
-VI_FILE   = "/home/pi/Home_Automation/home_automation/server/vi.txt"
+# log files running as a linux service require an absolute path
+MASTER_LOG  = "/home/pi/Home_Automation/home_automation/server/master_log.txt"      # messages from all loggers
+SERVER_LOG  = "/home/pi/Home_Automation/home_automation/server/server_log.txt"
+FLOW_LOG    = "/home/pi/Home_Automation/home_automation/server/flow_LOGtxt"
+VI_LOG      = "/home/pi/Home_Automation/home_automation/server/vi_log.txt"
 
 lighting_cmd_q = queue.Queue()          # unbounded, but will empty as soon as a record is added
 vi_q           = queue.Queue(10000)     # a week's worth of samples at 1 sample/min
@@ -60,7 +62,7 @@ class viThread(threading.Thread):
         global g_vi_latest
         global g_vi_lock
 
-        log.info("viThread running")
+        server_log.info("viThread running")
 
         # Set up SPI communications
         cs = digitalio.DigitalInOut(board.D22)      # NC, ignored. SPI_CS0 is used
@@ -98,7 +100,7 @@ class viThread(threading.Thread):
             try:
                 vi_q.put_nowait((vin, cur))
             except:
-                log.error("Unable to add record to vi_q")
+                server_log.error("Unable to add record to vi_q")
 
             # update global variable with latest sample
             with g_vi_lock:
@@ -106,7 +108,7 @@ class viThread(threading.Thread):
 
             # add to log file
             record = time.strftime("%m/%d/%Y %H:%M")+"\t%.1f"%vin+"\t%d"%cur+'\n'
-            log.debug(record)
+            server_log.debug(record)
             with open(VI_FILE, 'a') as f:
                 f.write(record)
 
@@ -150,7 +152,7 @@ class flowThread(threading.Thread):
         global g_flow_latest
         global g_flow_lock
 
-        log.info("flowThread running")
+        server_log.info("flowThread running")
 
         flow_meter = digitalio.DigitalInOut(board.D18)
         flow_meter.direction = digitalio.Direction.INPUT
@@ -194,14 +196,14 @@ class flowThread(threading.Thread):
 
             # first pulse in a long time
             if flowing and (dt > flowThread.LEAK_DETECT_DT):
-                log.info("Flow startup or Possible Leak")
+                server_log.info("Flow startup or Possible Leak")
 
             # log time and flow rate
             last_state = current_state
             now = int(time.strftime("%M"))
             if ((now != last_record_time) and flowing):   # record on the minute
                 record = time.strftime("%m/%d/%Y %H:%M")+"\t%.1f"%igpm+"\t%.0f"%gallons+'\n'
-                log.debug(record)
+                server_log.debug(record)
                 with open(FLOW_FILE, 'a') as f:
                     f.write(record)
                 last_record_time = now
@@ -247,7 +249,7 @@ class fpLightingThread(threading.Thread):
         return self.STD_INTENSITY.get(intensity, npdrvr.INTENSITY_LOW)
 
     def run(self):
-        log.info("fpLightingThread running")
+        server_log.info("fpLightingThread running")
 
         while True:
 
@@ -337,7 +339,7 @@ class fpLightingThread(threading.Thread):
                 else:   # unrecognized pattern, reset to default
                     self.light_style[3] = "STEADY"
                     self.delay = 0.0
-                    log.warning("Unrecognized lighting pattern = %s", self.light_style[3])
+                    server_log.warning("Unrecognized lighting pattern = %s", self.light_style[3])
 
             elif self.light_style[0] == "LIGHTING":       # message type = (LIGHTING, FENCEPOST NUMBER, ORIENTATION, COLOR, BRIGHTNESS)
                 self.color = self.light_style[3]
@@ -351,7 +353,7 @@ class fpLightingThread(threading.Thread):
             else:   # unrecognized type, reset to default
                 self.light_style = ("DISPLAY", "WHITE", "LOW", "STEADY")
                 self.delay = 0.0
-                log.warning("Unrecognized lighting message type = %s", self.light_style[0])
+                server_log.warning("Unrecognized lighting message type = %s", self.light_style[0])
 
 
 
@@ -370,12 +372,12 @@ class serverThread(threading.Thread):
         global g_flow_latest
         global g_flow_lock
 
-        log.info("serverThread running")
+        server_log.info("serverThread running")
 
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.bind((HOST, PORT))
         s.listen(5)
-        log.info("Listening on port (%s, %d)", HOST, PORT)
+        server_log.info("Listening on port (%s, %d)", HOST, PORT)
 
         while True:
             buf = b''
@@ -389,7 +391,7 @@ class serverThread(threading.Thread):
                     break
 
             msg = pickle.loads(buf) # depickle network message back to a message list
-            log.debug("Received message: %s", str(msg))
+            server_log.debug("Received message: %s", str(msg))
 
             #
             # decode and respond to message
@@ -421,24 +423,46 @@ class serverThread(threading.Thread):
                     client.sendall(pickle.dumps(history.reverse(), pickle.HIGHEST_PROTOCOL))
 
             else:
-                log.warning("Unknown message type received by %s node: %s" % (node_type, msg[0]))
+                server_log.warning("Unknown message type received by %s node: %s" % (node_type, msg[0]))
 
             client.close()
 
 
 if __name__ == "__main__":
 
-    # Set up a logger
+    # log configuration
     log_format ='%(asctime)s %(levelname)s %(message)s'
     log_datefmt ='%m/%d/%Y %H:%M:%S '
-    log_file_handler = logging.handlers.RotatingFileHandler(LOG_FILE, maxBytes=(256*1024), backupCount=3)    # 256K max file size, 4 files max
-    log_file_handler.setLevel('INFO')
-    log_level = logging.DEBUG
-    logging.basicConfig(format=log_format, datefmt=log_datefmt, handlers=(logging.StreamHandler(), log_file_handler), level=log_level)
-    log = logging.getLogger('')
+    log_formatter = logging.Formatter(fmt=log_format, datefmt=log_datefmt)
 
-    log.info("")
-    log.info("SERVER STARTING...")
+    # 256K max file size, 4 files max
+    master_log_fh = logging.handlers.RotatingFileHandler(MASTER_LOG, maxBytes=(256*1024), backupCount=3)
+    server_log_fh = logging.handlers.RotatingFileHandler(SERVER_LOG, maxBytes=(256*1024), backupCount=3)
+    flow_log_fh   = logging.handlers.RotatingFileHandler(FLOW_LOG, maxBytes=(256*1024), backupCount=3)
+    vi_log_fh     = logging.handlers.RotatingFileHandler(VI_LOG, maxBytes=(256*1024), backupCount=3)
+
+    # master_log (root) records eveything, level='DEBUG'
+    server_log_fh.setLevel('INFO')
+    server_log_fh.setFormatter(log_formatter)
+    flow_log_fh.setLevel('INFO')
+    flow_log_fh.setFormatter(log_formatter)
+    vi_log_fh.setLevel('INFO')
+    vi_log_fh.setFormatter(log_formatter)
+
+    # instantiate kiggers
+    master_log = logging.getLogger('han')
+    server_log = logging.getLogger('han.server')
+    flow_log   = logging.getLogger('han.flow')
+    vi_log     = logging.getLogger('han.vi')
+
+    # configure loggers
+    master_log.basicConfig((format=log_format, datefmt=log_datefmt, handlers=(logging.StreamHandler(), master_log_fh), level='DEBUG')
+    server_log.addHandler(server_log_fh)
+    flow_log.addHandler(flow_log_fh)
+    vi_log.addHandler(vi_log_fh)
+
+    server_log.info("")
+    server_log.info("SERVER STARTING...")
 
     #
     # Node will either be a fencepost light or a flowmeter
