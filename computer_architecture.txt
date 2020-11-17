@@ -15,6 +15,8 @@ Front Yard
 Lidar:			220	lidar			pi:raspberry
 Fenceposts: 		221	fencepost_front1	pi:raspberry
 
+Weather:		230	WeatherLinkLIVE
+
 
 Application
 All devices run a server listening for connection requests on port 6445
