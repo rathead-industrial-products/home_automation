@@ -8,9 +8,6 @@ Peavine Mountain	39.58971312494246, -119.92866268355475		302T/289M deg		13 mi
 Red Hill		39.58443127252201, -119.79873279853922		328T/315M deg		 8 mi
 
 
-
-
-
 Station		Channel		Freq		Location
 KTVN CBS 2	11		201 MHz		SM
 KRNV NBC 4	12		207 MHz		SM	
