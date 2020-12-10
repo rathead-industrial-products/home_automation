@@ -1,3 +1,8 @@
+CONFIGURATION MANAGEMENT (GIT)
+------------------------------
+rathead@mindmentum.com : m1tchgithub
+
+
 MAGIC MIRROR
 ------------
 
@@ -12,5 +17,15 @@ var config = {
     address: "0.0.0.0",                     // outside access, not just localhose
     port: 8080,
     ipWhitelist: [ ..., "192.168.1.0/24"],  // add local network
+
+
+ALL DEVICES
+-----------
+
+--- Services ---
+systemctl status mitchell_han.service		// status
+systemctl restart mitchell_han.service		// after changes
+
+
     
     
