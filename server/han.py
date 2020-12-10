@@ -460,7 +460,7 @@ class fpLightingThread(threading.Thread):
 
 
 HOST = ''           # Listen on all IP addresses on this host
-PORT = 6554         # Port to listen on (non-privileged ports are > 1023)
+PORT = 6445         # Port to listen on (non-privileged ports are > 1023)
 
 class serverThread(threading.Thread):
     def __init__(self, node_t):
@@ -538,7 +538,7 @@ class serverThread(threading.Thread):
 if __name__ == "__main__":
 
     # log configuration
-    log_format ='%(asctime)s %(levelname)s %(message)s'
+    log_format ='%(asctime)s ' + HOST_NAME + ' %(levelname)s %(message)s'
     log_datefmt ='%m/%d/%Y %H:%M:%S '
     log_formatter = logging.Formatter(fmt=log_format, datefmt=log_datefmt)
 
@@ -576,7 +576,12 @@ if __name__ == "__main__":
     # host name will be one of 'flowmeter' or 'fencepost-back-1'/'fencepost-back-2'/'fencepost-front-1'/etc
     #
 
-    node_type = socket.gethostname().split('-')[0]
+    HOST_NAME = socket.gethostname()
+    node_type = HOST_NAME.split('-')[0]
+    if ((node_type != 'fencepost') and (node_type != 'flowmeter')):
+        node_type = 'unknown: ' + node_type
+
+    server_log.info("Node type is %s", node_type)
 
     if node_type == 'fencepost':
         fpl_t   = fpLightingThread()
@@ -586,9 +591,6 @@ if __name__ == "__main__":
     elif node_type == 'flowmeter':
         flow_t = flowThread()
         flow_t.start()
-    else:
-        node_type = 'unknown: ' + node_type
-    server_log.info("Node type is %s", node_type)
 
     vi_t = viThread()
     vi_t.start()
