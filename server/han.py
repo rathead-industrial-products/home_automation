@@ -38,10 +38,10 @@ import random
 import fencepost_neopixel_driver as npdrvr
 
 # log files running as a linux service require an absolute path
-MASTER_LOG  = "/home/pi/Home_Automation/home_automation/server/master_log.txt"      # messages from all loggers
-SERVER_LOG  = "/home/pi/Home_Automation/home_automation/server/server_log.txt"
-FLOW_LOG    = "/home/pi/Home_Automation/home_automation/server/flow_LOGtxt"
-VI_LOG      = "/home/pi/Home_Automation/home_automation/server/vi_log.txt"
+MASTER_LOG  = "/home/pi/Home_Automation/home_automation/server/logs/master_log.txt"      # messages from all loggers
+SERVER_LOG  = "/home/pi/Home_Automation/home_automation/server/logs/server_log.txt"
+FLOW_LOG    = "/home/pi/Home_Automation/home_automation/server/logs/flow_log.txt"
+VI_LOG      = "/home/pi/Home_Automation/home_automation/server/logs/vi_log.txt"
 
 lighting_cmd_q = queue.Queue()          # unbounded, but will empty as soon as a record is added
 vi_q           = queue.Queue(10000)     # a week's worth of samples at 1 sample/min
@@ -160,9 +160,7 @@ class viThread(threading.Thread):
 
             # add to log file
             record = time.strftime("%m/%d/%Y %H:%M")+"\t%.1f"%vin+"\t%d"%cur+'\n'
-            server_log.debug(record)
-            with open(VI_FILE, 'a') as f:
-                f.write(record)
+            vi_log.info(record)
 
             time.sleep(viThread.SAMPLE_INTERVAL)
 
@@ -558,14 +556,14 @@ if __name__ == "__main__":
     vi_log_fh.setLevel('INFO')
     vi_log_fh.setFormatter(log_formatter)
 
-    # instantiate kiggers
+    # instantiate loggers
     master_log = logging.getLogger('han')
     server_log = logging.getLogger('han.server')
     flow_log   = logging.getLogger('han.flow')
     vi_log     = logging.getLogger('han.vi')
 
     # configure loggers
-    master_log.basicConfig((format=log_format, datefmt=log_datefmt, handlers=(logging.StreamHandler(), master_log_fh), level='DEBUG')
+    logging.basicConfig(format=log_format, datefmt=log_datefmt, handlers=(logging.StreamHandler(), master_log_fh), level='DEBUG')
     server_log.addHandler(server_log_fh)
     flow_log.addHandler(flow_log_fh)
     vi_log.addHandler(vi_log_fh)
@@ -590,7 +588,7 @@ if __name__ == "__main__":
         flow_t.start()
     else:
         node_type = 'unknown: ' + node_type
-    log.info("Node type is %s", node_type)
+    server_log.info("Node type is %s", node_type)
 
     vi_t = viThread()
     vi_t.start()
