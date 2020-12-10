@@ -537,6 +537,8 @@ class serverThread(threading.Thread):
 
 if __name__ == "__main__":
 
+    HOST_NAME = socket.gethostname()
+
     # log configuration
     log_format ='%(asctime)s ' + HOST_NAME + ' %(levelname)s %(message)s'
     log_datefmt ='%m/%d/%Y %H:%M:%S '
@@ -576,7 +578,6 @@ if __name__ == "__main__":
     # host name will be one of 'flowmeter' or 'fencepost-back-1'/'fencepost-back-2'/'fencepost-front-1'/etc
     #
 
-    HOST_NAME = socket.gethostname()
     node_type = HOST_NAME.split('-')[0]
     if ((node_type != 'fencepost') and (node_type != 'flowmeter')):
         node_type = 'unknown: ' + node_type
