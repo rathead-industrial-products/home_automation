@@ -19,6 +19,8 @@ Weather:		230	WeatherLinkLIVE
 
 
 Application
+
+=======================================================================
 All devices run a server listening for connection requests on port 6445
 
 Message Format
@@ -49,6 +51,15 @@ return history list, most recent first
 
 TYPE (PLAY_AUDIO)
 <wav file> ?
+
+=====================================================================================
+All devices run a service that sends health information to a logger at mindmentum.com
+Interval: 10 min
+
+POST URL to http://mindmentum.com/cgi-bin/ha_health.py
+JSON Data:
+"device" : "magicmirror" | "flowmeter" | ...
+
 
 
 
