@@ -1,4 +1,34 @@
 IP Addresses:
+
+Router Address: 192.168.1.1
+Username/pass: admin : mitchnet
+DHCP range : 1 - 254? or 199?
+DHCP lease time : 1 week
+Open SSH port to . . . .200:6445 (magicmirror)
+
+Switch Address: .2
+User/Pass: admin : mitchswitch
+
+NAS Address: .3
+User/Pass: admin : mitchnas
+
+Camera1/2/3: DHCP assigned IP
+
+TODO:
+
+magicmirror:
+Add two-factor identification?
+Allow SSH to port 6445
+Cron job every minute
+	send router WAN address to mindmentum.com
+	ping HAN nodes (add server "HEALTH_QUERY"?)
+	text notice if network issue
+
+Cameras:
+Assign hard IP
+
+
+
 Home automation devices are in the range 200-254
 All devices have assigned IP addresses
 
