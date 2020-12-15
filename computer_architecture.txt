@@ -38,12 +38,12 @@ Sprinkler System
 Flow Meter:		201	flowmeter		pi:raspberry
 
 Back Yard
-Fencepost 1-10:		202	fencepost_back1		pi:raspberry
-Fenceposts 11-20:	203	fencepost_back2		pi:raspberry
+Fencepost 1-10:		202	fencepost-back-1	pi:raspberry
+Fenceposts 11-20:	203	fencepost-back-2	pi:raspberry
 
 Front Yard
 Lidar:			220	lidar			pi:raspberry
-Fenceposts: 		221	fencepost_front1	pi:raspberry
+Fenceposts: 		221	fencepost-front-1	pi:raspberry
 
 Weather:		230	WeatherLinkLIVE
 
@@ -52,15 +52,20 @@ Application
 
 =======================================================================
 All devices run a server listening for connection requests on port 6445
+Not all devices respond to all message types
 
 Message Format
+--------------
+
 Type (LIGHTING)
+Node type target: fencepost
 Fencepost Number
 Orientation (N,S,E,W)
 Color
 Brightness
 
 Type (DISPLAY)
+Node type target: fencepost
 Color (RED, GREEN, BLUE, WHITE, RAINBOW)
 Intensity (LOW, MEDIUM, HIGH)
 Pattern (STEADY, STROBE, THROB, MARCH, TWINKLE)
@@ -68,27 +73,40 @@ Pattern (STEADY, STROBE, THROB, MARCH, TWINKLE)
 	TWINKLE = Randomly flash (off to intensity) to simulate stars twinkling
 
 Type (VI_QUERY)
+Node type target: fencepost, flowmeter
 return most recent (V,I)
 
 Type (VI_HISTORY)
+Node type target: fencepost, flowmeter
 return history list, most recent first
 
 Type (FLOW_QUERY)
+Node type target: flowmeter
 return most recent (GPM, CUM_GAL)
 
 Type (FLOW_HISTORY)
+Node type target: flowmeter
 return history list, most recent first
 
 TYPE (PLAY_AUDIO)
+Node type target: fencepost
 <wav file> ?
+
+TYPE (HEALTH_NOTICE)
+Node type target: magicmirror
+record node health
 
 =====================================================================================
 All devices run a service that sends health information to a logger at mindmentum.com
-Interval: 10 min
+Interval: 1 min
 
-POST URL to http://mindmentum.com/cgi-bin/ha_health.py
+POST URL to http://mindmentum.com/cgi-bin/ha.py
 JSON Data:
 "device" : "magicmirror" | "flowmeter" | ...
+
+CGI script:
+record health data
+update IP address for dynamic DNS
 
 
 
