@@ -37,11 +37,15 @@ import adafruit_bus_device.spi_device
 import random
 import fencepost_neopixel_driver as npdrvr
 
+SYSTEM_HOSTS = ("magicmirror", "flowmeter", "lidar", "fencepost-back-1", "fencepost-back-2", "fencepost-front-1")
+HOME_AUTOMATION_PORT = 6445
+
 # log files running as a linux service require an absolute path
-MASTER_LOG  = "/home/pi/Home_Automation/home_automation/server/logs/master_log.txt"      # messages from all loggers
-SERVER_LOG  = "/home/pi/Home_Automation/home_automation/server/logs/server_log.txt"
-FLOW_LOG    = "/home/pi/Home_Automation/home_automation/server/logs/flow_log.txt"
-VI_LOG      = "/home/pi/Home_Automation/home_automation/server/logs/vi_log.txt"
+LOG_PATH_BASE = "/home/pi/Home_Automation/home_automation/server/logs/"
+MASTER_LOG    = LOG_PATH_BASE + "master_log.txt"      # messages from all loggers
+SERVER_LOG    = LOG_PATH_BASE + "server_log.txt"
+FLOW_LOG      = LOG_PATH_BASE + "flow_log.txt"
+VI_LOG        = LOG_PATH_BASE + "vi_log.txt"
 
 lighting_cmd_q = queue.Queue()          # unbounded, but will empty as soon as a record is added
 vi_q           = queue.Queue(10000)     # a week's worth of samples at 1 sample/min
@@ -53,6 +57,14 @@ g_flow_latest  = (1, 2)                 # global variable containing latest (gpm
 g_active_zone  = "Off"                  # global variable containing currently active (ON) sprinkler zone
 g_flow_lock    = threading.Lock()
 
+# message types and supporting node types
+MSG_TYPES = { 'DISPLAY'      : ('fencepost', ),
+              'VI_QUERY'     : ('flowmeter', 'fencepost'),
+              'VI_HISTORY'   : ('flowmeter', 'fencepost'),
+              'FLOW_QUERY'   : ('flowmeter', ),
+              'FLOW_HISTORY' : ('flowmeter', ),
+              'PLAY_AUDIO'   : ('fencepost', ),
+              'HEALTH_NOTICE': ('magicmirror', ), }
 
 class audioThread(threading.Thread):
     #
@@ -462,10 +474,41 @@ class fpLightingThread(threading.Thread):
                 self.delay = 0.0
                 server_log.warning("Unrecognized lighting message type = %s", self.light_style[0])
 
+class healthThread(threading.Thread):
+    HEARTBEAT_INTERVAL = 60    # report health every minute
+    REMOTE_URL = "http://mindmentum.com/cgi-bin/ha.py"
+    REMOTE_REQUEST = 'curl -X POST -H "Content-Type: application/json" -d '
+
+    def __init__(self, host, node_t):
+        threading.Thread.__init__(self)
+        host_name = host
+        node_type = node_t
+        self.daemon = True
+
+    def run(self):
+        server_log.info("healthThread running")
+
+        while True:
+            health_status = "'{ 'device' : '" + host_name + "' }'"  # dictionary of health related parameters
+
+            # report health to remote server
+            # os.system('curl -X POST -H "Content-Type: application/json" -d \'{"device": "flowmeter"}\' http://mindmentum.com/cgi-bin/ha.py > /dev/null 2>&1')
+            os.system(REMOTE_REQUEST + health_status + REMOTE_URL + " > /dev/null 2>&1")
+
+            # report health to magic mirror
+            msg = ("HEALTH_NOTICE", health_status)  # message must be a list
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            try:
+                s.connect(("magicmirror", HOME_AUTOMATION_PORT))
+            except:
+                server_log.warning("healthThread failed to report to magic mirror")
+            else:
+                s.sendall(pickle.dumps(msg, pickle.HIGHEST_PROTOCOL))
+                s.close()
+
+            time.sleep(healthThread.HEARTBEAT_INTERVAL)
 
 
-HOST = ''           # Listen on all IP addresses on this host
-PORT = 6445         # Port to listen on (non-privileged ports are > 1023)
 
 class serverThread(threading.Thread):
     def __init__(self, node_t):
@@ -482,9 +525,9 @@ class serverThread(threading.Thread):
         server_log.info("serverThread running")
 
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.bind((HOST, PORT))
+        s.bind(('', HOME_AUTOMATION_PORT)) # listen on all IP addresses on this host
         s.listen(5)
-        server_log.info("Listening on port (%s, %d)", HOST, PORT)
+        server_log.info("Listening on port (%s, %d)", "''", HOME_AUTOMATION_PORT)
 
         while True:
             buf = b''
@@ -499,53 +542,69 @@ class serverThread(threading.Thread):
 
             msg = pickle.loads(buf) # depickle network message back to a message list
             server_log.debug("Received message: %s", str(msg))
+            msg_t = msg[0]
 
-            #
-            # decode and respond to message
-            #
-            if msg[0] == "VI_QUERY":
-                # fetch global variable with latest vi sample
-                with g_vi_lock:
-                    (vin, cur) = g_vi_latest
-                client.sendall(pickle.dumps((vin, cur), pickle.HIGHEST_PROTOCOL))
-
-            elif msg[0] == "SOUND":
-                # get mp3 file and drive output
-                pass
-
-            elif msg[0] == "VI_HISTORY":
-                vi_list = []
-                if not vi_q.empty():
-                    vi_list.append(vi_q.get_nowait())
-                client.sendall(pickle.dumps(vi_list, pickle.HIGHEST_PROTOCOL))
-
-            elif ((node_type == "fencepost") and ((msg[0] == "LIGHTING") or (msg[0] == "DISPLAY"))):
-                lighting_cmd_q.put(msg)
-
-            elif ((node_type == "flowmeter") and (msg[0] == "FLOW_QUERY")):
-                # fetch global variable with latest flow sample and zone activation
-                with g_flow_lock:
-                    (gpm, gal) = g_flow_latest
-                    zone = g_active_zone
-                client.sendall(pickle.dumps((gpm, gal, zone), pickle.HIGHEST_PROTOCOL))
-
-            elif ((node_type == "flowmeter") and (msg[0] == "FLOW_HISTORY")):
-                with open('flowrecord.txt', 'r') as f:
-                    history = f.readlines()
-                    client.sendall(pickle.dumps(history.reverse(), pickle.HIGHEST_PROTOCOL))
-
+            # validate message can be handled by this node type
+            if msg_t not in MSG_TYPES:
+                server_log.warning("Unknown message type received: %s" % msg_t)
             else:
-                server_log.warning("Unknown message type received by %s node: %s" % (node_type, msg[0]))
+                if node_type not in MSG_TYPES[msg_t]:
+                    server_log.warning("Message type %s cannot be handled by this node type" % msg_t)
+
+                else:   # decode and respond to message
+                    if msg_t == "VI_QUERY":
+                        # fetch global variable with latest vi sample
+                        with g_vi_lock:
+                            (vin, cur) = g_vi_latest
+                        client.sendall(pickle.dumps((vin, cur), pickle.HIGHEST_PROTOCOL))
+
+                    elif msg_t == "SOUND":
+                        # get mp3 file and drive output
+                        pass
+
+                    elif msg_t == "VI_HISTORY":
+                        vi_list = []
+                        if not vi_q.empty():
+                            vi_list.append(vi_q.get_nowait())
+                        client.sendall(pickle.dumps(vi_list, pickle.HIGHEST_PROTOCOL))
+
+                    elif msg_t == "DISPLAY":
+                        lighting_cmd_q.put(msg)
+
+                    elif msg_t == "FLOW_QUERY":
+                        # fetch global variable with latest flow sample and zone activation
+                        with g_flow_lock:
+                            (gpm, gal) = g_flow_latest
+                            zone = g_active_zone
+                        client.sendall(pickle.dumps((gpm, gal, zone), pickle.HIGHEST_PROTOCOL))
+
+                    elif msg_t == "FLOW_HISTORY":
+                        with open('flowrecord.txt', 'r') as f:
+                            history = f.readlines()
+                            client.sendall(pickle.dumps(history.reverse(), pickle.HIGHEST_PROTOCOL))
+
+                    elif msg_t == "HEALTH_NOTICE":
+                        mm.nodeStatusHandler(msg)
+                        pass
 
             client.close()
 
 
 if __name__ == "__main__":
 
-    HOST_NAME = socket.gethostname()
+    host_name = socket.gethostname()
+    if not host_name in SYSTEM_HOSTS:
+        node_type = 'unknown: ' + host_name
+    else:
+        node_type = host_name.split('-')[0]
+
+    # magicmirror node has additional functionality and incorporates a communication
+    # channed to the magicmirror Javascript app
+    if node_type == 'magicmirror':
+        import han_mm as mm
 
     # log configuration
-    log_format ='%(asctime)s ' + HOST_NAME + ' %(levelname)s %(message)s'
+    log_format ='%(asctime)s ' + host_name + ' %(levelname)s %(message)s'
     log_datefmt ='%m/%d/%Y %H:%M:%S '
     log_formatter = logging.Formatter(fmt=log_format, datefmt=log_datefmt)
 
@@ -563,43 +622,44 @@ if __name__ == "__main__":
     vi_log_fh.setLevel('INFO')
     vi_log_fh.setFormatter(log_formatter)
 
-    # instantiate loggers
-    master_log = logging.getLogger('han')
-    server_log = logging.getLogger('han.server')
-    flow_log   = logging.getLogger('han.flow')
-    vi_log     = logging.getLogger('han.vi')
-
-    # configure loggers
+    # configure and instantiate loggers
     logging.basicConfig(format=log_format, datefmt=log_datefmt, handlers=(logging.StreamHandler(), master_log_fh), level='DEBUG')
+    master_log = logging.getLogger('han')               # all nodes
+    server_log = logging.getLogger('han.server')
     server_log.addHandler(server_log_fh)
-    flow_log.addHandler(flow_log_fh)
-    vi_log.addHandler(vi_log_fh)
+
+    if (node_type == 'flowmeter') or (node_type == 'fencepost'):
+        vi_log = logging.getLogger('han.vi')
+        vi_log.addHandler(vi_log_fh)
+
+        if node_type == 'flowmeter':
+            flow_log = logging.getLogger('han.flow')
+            flow_log.addHandler(flow_log_fh)
 
     server_log.info("")
     server_log.info("SERVER STARTING...")
-
-    #
-    # Node will either be a fencepost light or a flowmeter
-    # host name will be one of 'flowmeter' or 'fencepost-back-1'/'fencepost-back-2'/'fencepost-front-1'/etc
-    #
-
-    node_type = HOST_NAME.split('-')[0]
-    if ((node_type != 'fencepost') and (node_type != 'flowmeter')):
-        node_type = 'unknown: ' + node_type
-
+    server_log.info("Host name is %s", host_name)
     server_log.info("Node type is %s", node_type)
 
-    if node_type == 'fencepost':
-        fpl_t   = fpLightingThread()
-        audio_t = audioThread()
+    # start threads
+    if node_type in MSG_TYPES['DISPLAY']:
+        fpl_t = fpLightingThread()
         fpl_t.start()
-        audio_t.start()
-    elif node_type == 'flowmeter':
+    if node_type in MSG_TYPES['VI_QUERY']:
+        vi_t = viThread()
+        vi_t.start()
+    if node_type in MSG_TYPES['FLOW_QUERY']:
         flow_t = flowThread()
         flow_t.start()
+    if node_type in MSG_TYPES['PLAY_AUDIO']:
+        audio_t = audioThread()
+        audio_t.start()
+    if node_type == 'magicmirror':
+        mm.start()   # start mm.threadfunction_t ...
+        pass
 
-    vi_t = viThread()
-    vi_t.start()
+    health_t = healthThread(host_name, node_type)
+    health_t.start()
 
     server_t = serverThread(node_type)
     server_t.start()
