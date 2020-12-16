@@ -20,6 +20,9 @@ from json import dumps
 
 import threading
 import logging
+import requests
+import time
+
 
 JAVASCRIPT_HTTP_PORT = 6446
 
@@ -98,12 +101,12 @@ class davisThread(threading.Thread):
         mirror_log.info("davisThread running")
 
         while True:
-            # fetch JSON report from Davis Weatherlink
-            weather = json.loads(os.system("curl" + DAVIS_URL))
+            # fetch and log JSON report from Davis Weatherlink
+            weather = requests.get(self.DAVIS_URL).json()
             davis_log.info(weather)
 
             # repeat every SAMPLE_INTERVAL mins
-            time.sleep(60 * (SAMPLE_INTERVAL - (time.localtime().tm_min % SAMPLE_INTERVAL)))
+            time.sleep(60 * (self.SAMPLE_INTERVAL - (time.localtime().tm_min % self.SAMPLE_INTERVAL)))
 
 
 class ecobeeThread(threading.Thread):
@@ -123,7 +126,7 @@ class ecobeeThread(threading.Thread):
             # ecobee_log.info(data)
 
             # repeat every SAMPLE_INTERVAL mins
-            time.sleep(60 * (SAMPLE_INTERVAL - (time.localtime().tm_min % SAMPLE_INTERVAL)))
+            time.sleep(60 * (self.SAMPLE_INTERVAL - (time.localtime().tm_min % self.SAMPLE_INTERVAL)))
 
 
 def nodeStatusHandler(msg):
