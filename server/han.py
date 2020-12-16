@@ -478,7 +478,6 @@ class fpLightingThread(threading.Thread):
 class healthThread(threading.Thread):
     HEARTBEAT_INTERVAL = 60    # report health every minute
     REMOTE_URL = "http://mindmentum.com/cgi-bin/ha.py"
-    REMOTE_REQUEST = 'curl -X POST -H "Content-Type: application/json" -d '
 
     def __init__(self, host, node_t):
         threading.Thread.__init__(self)
@@ -490,10 +489,10 @@ class healthThread(threading.Thread):
         server_log.info("healthThread running")
 
         while True:
-            health_status = { 'device' : '" + host_name + "' }  # dictionary of health related parameters
+            health_status = { 'host' : self.host_name }  # dictionary of health related parameters
 
             # post health to remote server
-            requests.post(REMOTE_URL, data=health_status)
+            requests.post(self.REMOTE_URL, data=health_status)
 
             # report health to magic mirror
             msg = ("HEALTH_NOTICE", health_status)  # message must be a list

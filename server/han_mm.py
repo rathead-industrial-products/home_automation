@@ -131,7 +131,7 @@ class ecobeeThread(threading.Thread):
 
 def nodeStatusHandler(msg):
     # msg format: { 'device' : host_name }
-    node_status_log.info(msg['device'])
+    node_status_log.info(msg['host'])
 
 
 
