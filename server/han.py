@@ -584,7 +584,7 @@ class serverThread(threading.Thread):
                             client.sendall(pickle.dumps(history.reverse(), pickle.HIGHEST_PROTOCOL))
 
                     elif msg_t == "HEALTH_NOTICE":
-                        mm.nodeStatusHandler(msg)
+                        mm.nodeStatusHandler(msg[1])    # pass JSON payload
                         pass
 
             client.close()
