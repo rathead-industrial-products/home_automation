@@ -17,6 +17,8 @@ via a CORS-aware HTTP server.
 
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from json import dumps
+
+import threading
 import logging
 
 JAVASCRIPT_HTTP_PORT = 6446

@@ -598,11 +598,6 @@ if __name__ == "__main__":
     else:
         node_type = host_name.split('-')[0]
 
-    # magicmirror node has additional functionality and incorporates a communication
-    # channed to the magicmirror Javascript app
-    if node_type == 'magicmirror':
-        import han_mm as mm
-
     # log configuration
     log_datefmt = '%m/%d/%Y %H:%M:%S '
     log_format ='%(asctime)s ' + host_name + ' %(levelname)s %(message)s'
@@ -655,8 +650,10 @@ if __name__ == "__main__":
         audio_t = audioThread()
         audio_t.start()
     if node_type == 'magicmirror':
-        mm.start()   # start mm.threadfunction_t ...
-        pass
+        # magicmirror node has additional functionality and incorporates a communication
+        # channed to the magicmirror Javascript app
+        # setup code will run and magicmirror threads will start on import
+        import han_mm as mm
 
     health_t = healthThread(host_name, node_type)
     health_t.start()
