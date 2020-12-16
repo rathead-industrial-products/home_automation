@@ -489,10 +489,10 @@ class healthThread(threading.Thread):
         server_log.info("healthThread running")
 
         while True:
-            health_status = { 'host' : self.host_name }  # dictionary of health related parameters
+            health_status = { 'host' : host_name }  # dictionary of health related parameters
 
             # post health to remote server
-            requests.post(self.REMOTE_URL, data=health_status)
+            requests.post(self.REMOTE_URL, json=health_status)
 
             # report health to magic mirror
             msg = ("HEALTH_NOTICE", health_status)  # message must be a list
