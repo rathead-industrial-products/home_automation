@@ -175,11 +175,6 @@ class viThread(threading.Thread):
             record = time.strftime("%m/%d/%Y %H:%M")+"\t%.1f"%vin+"\t%d"%cur
             vi_log.info(record)
 
-            # report health to mindmentum.com
-            os.system('curl -X POST -H "Content-Type: application/json" \
-            -d \'{"device": "flowmeter"}\' \
-            http://mindmentum.com/cgi-bin/ha_health.py > /dev/null 2>&1')
-
             time.sleep(viThread.SAMPLE_INTERVAL)
 
 
