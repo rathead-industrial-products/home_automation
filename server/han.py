@@ -27,9 +27,10 @@ import queue
 import time
 import os
 import socket
+import requests
 import pickle
 import logging
-import logging.handlers
+import logging.handlers # separate module from logging
 import board
 import busio
 import digitalio
@@ -489,11 +490,10 @@ class healthThread(threading.Thread):
         server_log.info("healthThread running")
 
         while True:
-            health_status = "'{ 'device' : '" + host_name + "' }'"  # dictionary of health related parameters
+            health_status = { 'device' : '" + host_name + "' }  # dictionary of health related parameters
 
-            # report health to remote server
-            # os.system('curl -X POST -H "Content-Type: application/json" -d \'{"device": "flowmeter"}\' http://mindmentum.com/cgi-bin/ha.py > /dev/null 2>&1')
-            os.system(self.REMOTE_REQUEST + health_status + self.REMOTE_URL + " > /dev/null 2>&1")
+            # post health to remote server
+            requests.post(REMOTE_URL, data=health_status)
 
             # report health to magic mirror
             msg = ("HEALTH_NOTICE", health_status)  # message must be a list
