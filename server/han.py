@@ -493,7 +493,7 @@ class healthThread(threading.Thread):
 
             # report health to remote server
             # os.system('curl -X POST -H "Content-Type: application/json" -d \'{"device": "flowmeter"}\' http://mindmentum.com/cgi-bin/ha.py > /dev/null 2>&1')
-            os.system(REMOTE_REQUEST + health_status + REMOTE_URL + " > /dev/null 2>&1")
+            os.system(self.REMOTE_REQUEST + health_status + self.REMOTE_URL + " > /dev/null 2>&1")
 
             # report health to magic mirror
             msg = ("HEALTH_NOTICE", health_status)  # message must be a list
@@ -506,7 +506,7 @@ class healthThread(threading.Thread):
                 s.sendall(pickle.dumps(msg, pickle.HIGHEST_PROTOCOL))
                 s.close()
 
-            time.sleep(healthThread.HEARTBEAT_INTERVAL)
+            time.sleep(self.HEARTBEAT_INTERVAL)
 
 
 
@@ -590,76 +590,74 @@ class serverThread(threading.Thread):
             client.close()
 
 
-if __name__ == "__main__":
+host_name = socket.gethostname()
+if not host_name in SYSTEM_HOSTS:
+    node_type = 'unknown: ' + host_name
+else:
+    node_type = host_name.split('-')[0]
 
-    host_name = socket.gethostname()
-    if not host_name in SYSTEM_HOSTS:
-        node_type = 'unknown: ' + host_name
-    else:
-        node_type = host_name.split('-')[0]
+# log configuration
+log_datefmt = '%m/%d/%Y %H:%M:%S '
+log_format ='%(asctime)s ' + host_name + ' %(levelname)s %(message)s'
+log_formatter = logging.Formatter(fmt=log_format, datefmt=log_datefmt)
 
-    # log configuration
-    log_datefmt = '%m/%d/%Y %H:%M:%S '
-    log_format ='%(asctime)s ' + host_name + ' %(levelname)s %(message)s'
-    log_formatter = logging.Formatter(fmt=log_format, datefmt=log_datefmt)
+# 256K max file size, 4 files max
+master_log_fh = logging.handlers.RotatingFileHandler(MASTER_LOG, maxBytes=(256*1024), backupCount=3)
+server_log_fh = logging.handlers.RotatingFileHandler(SERVER_LOG, maxBytes=(256*1024), backupCount=3)
+flow_log_fh   = logging.handlers.RotatingFileHandler(FLOW_LOG, maxBytes=(256*1024), backupCount=3)
+vi_log_fh     = logging.handlers.RotatingFileHandler(VI_LOG, maxBytes=(256*1024), backupCount=3)
 
-    # 256K max file size, 4 files max
-    master_log_fh = logging.handlers.RotatingFileHandler(MASTER_LOG, maxBytes=(256*1024), backupCount=3)
-    server_log_fh = logging.handlers.RotatingFileHandler(SERVER_LOG, maxBytes=(256*1024), backupCount=3)
-    flow_log_fh   = logging.handlers.RotatingFileHandler(FLOW_LOG, maxBytes=(256*1024), backupCount=3)
-    vi_log_fh     = logging.handlers.RotatingFileHandler(VI_LOG, maxBytes=(256*1024), backupCount=3)
+# master_log (root) records eveything, level='DEBUG'
+server_log_fh.setLevel('INFO')
+server_log_fh.setFormatter(log_formatter)
+flow_log_fh.setLevel('INFO')
+flow_log_fh.setFormatter(log_formatter)
+vi_log_fh.setLevel('INFO')
+vi_log_fh.setFormatter(log_formatter)
 
-    # master_log (root) records eveything, level='DEBUG'
-    server_log_fh.setLevel('INFO')
-    server_log_fh.setFormatter(log_formatter)
-    flow_log_fh.setLevel('INFO')
-    flow_log_fh.setFormatter(log_formatter)
-    vi_log_fh.setLevel('INFO')
-    vi_log_fh.setFormatter(log_formatter)
+# configure and instantiate loggers
+logging.basicConfig(format=log_format, datefmt=log_datefmt, handlers=(logging.StreamHandler(), master_log_fh), level='DEBUG')
+master_log = logging.getLogger('han')               # all nodes
+server_log = logging.getLogger('han.server')
+server_log.addHandler(server_log_fh)
 
-    # configure and instantiate loggers
-    logging.basicConfig(format=log_format, datefmt=log_datefmt, handlers=(logging.StreamHandler(), master_log_fh), level='DEBUG')
-    master_log = logging.getLogger('han')               # all nodes
-    server_log = logging.getLogger('han.server')
-    server_log.addHandler(server_log_fh)
+if (node_type == 'flowmeter') or (node_type == 'fencepost'):
+    vi_log = logging.getLogger('han.vi')
+    vi_log.addHandler(vi_log_fh)
 
-    if (node_type == 'flowmeter') or (node_type == 'fencepost'):
-        vi_log = logging.getLogger('han.vi')
-        vi_log.addHandler(vi_log_fh)
+    if node_type == 'flowmeter':
+        flow_log = logging.getLogger('han.flow')
+        flow_log.addHandler(flow_log_fh)
 
-        if node_type == 'flowmeter':
-            flow_log = logging.getLogger('han.flow')
-            flow_log.addHandler(flow_log_fh)
+server_log.info("")
+server_log.info("SERVER STARTING...")
+server_log.info("Host name is %s", host_name)
+server_log.info("Node type is %s", node_type)
 
-    server_log.info("")
-    server_log.info("SERVER STARTING...")
-    server_log.info("Host name is %s", host_name)
-    server_log.info("Node type is %s", node_type)
+# start threads
+if node_type in MSG_TYPES['DISPLAY']:
+    fpl_t = fpLightingThread()
+    fpl_t.start()
+if node_type in MSG_TYPES['VI_QUERY']:
+    vi_t = viThread()
+    vi_t.start()
+if node_type in MSG_TYPES['FLOW_QUERY']:
+    flow_t = flowThread()
+    flow_t.start()
+if node_type in MSG_TYPES['PLAY_AUDIO']:
+    audio_t = audioThread()
+    audio_t.start()
+if node_type == 'magicmirror':
+    # magicmirror node has additional functionality and incorporates a communication
+    # channed to the magicmirror Javascript app
+    # setup code will run and magicmirror threads will start on import
+    import han_mm as mm
 
-    # start threads
-    if node_type in MSG_TYPES['DISPLAY']:
-        fpl_t = fpLightingThread()
-        fpl_t.start()
-    if node_type in MSG_TYPES['VI_QUERY']:
-        vi_t = viThread()
-        vi_t.start()
-    if node_type in MSG_TYPES['FLOW_QUERY']:
-        flow_t = flowThread()
-        flow_t.start()
-    if node_type in MSG_TYPES['PLAY_AUDIO']:
-        audio_t = audioThread()
-        audio_t.start()
-    if node_type == 'magicmirror':
-        # magicmirror node has additional functionality and incorporates a communication
-        # channed to the magicmirror Javascript app
-        # setup code will run and magicmirror threads will start on import
-        import han_mm as mm
+health_t = healthThread(host_name, node_type)
+health_t.start()
 
-    health_t = healthThread(host_name, node_type)
-    health_t.start()
+server_t = serverThread(node_type)
+server_t.start()
 
-    server_t = serverThread(node_type)
-    server_t.start()
-
-    while True:
-        pass
+while True:
+    pass

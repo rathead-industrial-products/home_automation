@@ -128,57 +128,50 @@ class ecobeeThread(threading.Thread):
 
 def nodeStatusHandler(msg):
     # msg format: { 'device' : host_name }
-    node_status_log_fh.info(msg['device'])
+    node_status_log.info(msg['device'])
 
 
-def start():
 
-    host_name = 'magicmirror'       # han.py conditionally loads this module for magicmirror only
-    node_type = 'magicmirror'
+host_name = 'magicmirror'       # han.py conditionally loads this module for magicmirror only
+node_type = 'magicmirror'
 
-    mirror_log = logging.getLogger('han.mirror')    # logger previously instantiated in han.py
+mirror_log = logging.getLogger('han.mirror')    # logger previously instantiated in han.py
 
-    # log configurations
-    log_datefmt = '%m/%d/%Y %H:%M:%S '
-    log_format ='%(asctime)s ' + host_name + ' %(levelname)s %(message)s'
-    log_formatter = logging.Formatter(fmt=log_format, datefmt=log_datefmt)
-    data_log_format ='%(asctime)s %(message)s'
-    data_log_formatter = logging.Formatter(fmt=data_log_format, datefmt=log_datefmt)
+# log configurations
+log_datefmt = '%m/%d/%Y %H:%M:%S '
+log_format ='%(asctime)s ' + host_name + ' %(levelname)s %(message)s'
+log_formatter = logging.Formatter(fmt=log_format, datefmt=log_datefmt)
+data_log_format ='%(asctime)s %(message)s'
+data_log_formatter = logging.Formatter(fmt=data_log_format, datefmt=log_datefmt)
 
-    mirror_log_fh      = logging.handlers.RotatingFileHandler(MIRROR_LOG, maxBytes=(256*1024), backupCount=3)
-    davis_log_fh       = logging.handlers.RotatingFileHandler(DAVIS_LOG, maxBytes=(256*1024), backupCount=3)
-    ecobee_log_fh      = logging.handlers.RotatingFileHandler(ECOBEE_LOG, maxBytes=(256*1024), backupCount=3)
-    node_status_log_fh = logging.handlers.RotatingFileHandler(NODE_STATUS_LOG, maxBytes=(256*1024), backupCount=3)
+mirror_log_fh      = logging.handlers.RotatingFileHandler(MIRROR_LOG, maxBytes=(256*1024), backupCount=3)
+davis_log_fh       = logging.handlers.RotatingFileHandler(DAVIS_LOG, maxBytes=(256*1024), backupCount=3)
+ecobee_log_fh      = logging.handlers.RotatingFileHandler(ECOBEE_LOG, maxBytes=(256*1024), backupCount=3)
+node_status_log_fh = logging.handlers.RotatingFileHandler(NODE_STATUS_LOG, maxBytes=(256*1024), backupCount=3)
 
-    mirror_log_fh.setLevel('INFO')
-    mirror_log_fh.setFormatter(log_formatter)
-    node_status_log_fh.setLevel('INFO')
-    node_status_log_fh.setFormatter(log_formatter)
-    davis_log_fh.setLevel('INFO')
-    davis_log_fh.setFormatter(data_log_formatter)
-    ecobee_log_fh.setLevel('INFO')
-    ecobee_log_fh.setFormatter(data_log_formatter)
+mirror_log_fh.setLevel('INFO')
+mirror_log_fh.setFormatter(log_formatter)
+node_status_log_fh.setLevel('INFO')
+node_status_log_fh.setFormatter(log_formatter)
+davis_log_fh.setLevel('INFO')
+davis_log_fh.setFormatter(data_log_formatter)
+ecobee_log_fh.setLevel('INFO')
+ecobee_log_fh.setFormatter(data_log_formatter)
 
-    mirror_log      = logging.getLogger('han.mirror')
-    davis_log       = logging.getLogger('han.mirror.davis')
-    ecobee_log      = logging.getLogger('han.mirror.ecobee')
-    node_status_log = logging.getLogger('han.mirror.node_status')
+mirror_log      = logging.getLogger('han.mirror')
+davis_log       = logging.getLogger('han.mirror.davis')
+ecobee_log      = logging.getLogger('han.mirror.ecobee')
+node_status_log = logging.getLogger('han.mirror.node_status')
 
-    mirror_log.info("")
-    mirror_log.info("MAGICMIRROR STARTING...")
+mirror_log.info("")
+mirror_log.info("MAGICMIRROR STARTING...")
 
-    # start threads
-    davis_t = davisThread()
-    davis_t.start()
+# start threads
+davis_t = davisThread()
+davis_t.start()
 
-    ecobee_t = ecobeeThread()
-    ecobee_t.start()
+ecobee_t = ecobeeThread()
+ecobee_t.start()
 
-    http_server_t = httpServerThread()
-    http_server_t.start()
-
-
-if __name__ == "__main__":
-    start()
-    while True:
-        pass
+http_server_t = httpServerThread()
+http_server_t.start()
