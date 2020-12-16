@@ -41,7 +41,7 @@ SYSTEM_HOSTS = ("magicmirror", "flowmeter", "lidar", "fencepost-back-1", "fencep
 HOME_AUTOMATION_PORT = 6445
 
 # log files running as a linux service require an absolute path
-LOG_PATH_BASE = "/home/pi/Home_Automation/home_automation/server/logs/"
+LOG_PATH_BASE = "/home/pi/home_automation/server/logs/"
 MASTER_LOG    = LOG_PATH_BASE + "master_log.txt"      # messages from all loggers
 SERVER_LOG    = LOG_PATH_BASE + "server_log.txt"
 FLOW_LOG      = LOG_PATH_BASE + "flow_log.txt"
@@ -604,8 +604,8 @@ if __name__ == "__main__":
         import han_mm as mm
 
     # log configuration
+    log_datefmt = '%m/%d/%Y %H:%M:%S '
     log_format ='%(asctime)s ' + host_name + ' %(levelname)s %(message)s'
-    log_datefmt ='%m/%d/%Y %H:%M:%S '
     log_formatter = logging.Formatter(fmt=log_format, datefmt=log_datefmt)
 
     # 256K max file size, 4 files max

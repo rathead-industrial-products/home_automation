@@ -22,6 +22,7 @@ import logging
 JAVASCRIPT_HTTP_PORT = 6446
 
 # absolute paths to log files
+LOG_PATH_BASE   = "/home/pi/home_automation/server/logs/"
 MIRROR_LOG      = LOG_PATH_BASE + "mirror_log.txt"
 DAVIS_LOG       = LOG_PATH_BASE + "davis_log.txt"
 ECOBEE_LOG      = LOG_PATH_BASE + "ecobee_log.txt"
@@ -135,8 +136,10 @@ def start():
 
     mirror_log = logging.getLogger('han.mirror')    # logger previously instantiated in han.py
 
-
-    # log configurations in addition to han.py
+    # log configurations
+    log_datefmt = '%m/%d/%Y %H:%M:%S '
+    log_format ='%(asctime)s ' + host_name + ' %(levelname)s %(message)s'
+    log_formatter = logging.Formatter(fmt=log_format, datefmt=log_datefmt)
     data_log_format ='%(asctime)s %(message)s'
     data_log_formatter = logging.Formatter(fmt=data_log_format, datefmt=log_datefmt)
 
