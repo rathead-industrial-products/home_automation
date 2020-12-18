@@ -102,8 +102,13 @@ class davisThread(threading.Thread):
 
         while True:
             # fetch and log JSON report from Davis Weatherlink
+            report = { }
             weather = requests.get(self.DAVIS_URL).json()
-            davis_log.info(weather)
+            report['o_temp'] = weather['data']['conditions'][0]['temp']
+            report['o_hum']  = weather['data']['conditions'][0]['hum']
+            report['i_temp'] = weather['data']['conditions'][1]['temp_in']
+            report['i_hum']  = weather['data']['conditions'][1]['hum_in']
+            davis_log.info(report)
 
             # repeat every SAMPLE_INTERVAL mins
             time.sleep(60 * (self.SAMPLE_INTERVAL - (time.localtime().tm_min % self.SAMPLE_INTERVAL)))
@@ -137,8 +142,6 @@ def nodeStatusHandler(msg):
 
 host_name = 'magicmirror'       # han.py conditionally loads this module for magicmirror only
 node_type = 'magicmirror'
-
-mirror_log = logging.getLogger('han.mirror')    # logger previously instantiated in han.py
 
 # log configurations
 log_datefmt = '%m/%d/%Y %H:%M:%S '

@@ -495,7 +495,7 @@ class healthThread(threading.Thread):
             try:
                 s.connect(("magicmirror", HOME_AUTOMATION_PORT))
             except:
-                server_log.warning("healthThread failed to report to magic mirror")
+                server_log.warning("healthThread failed to report to magic mirror, socket could not be established.")
             else:
                 s.sendall(pickle.dumps(msg, pickle.HIGHEST_PROTOCOL))
                 s.close()
@@ -596,10 +596,11 @@ log_format ='%(asctime)s ' + host_name + ' %(levelname)s %(message)s'
 log_formatter = logging.Formatter(fmt=log_format, datefmt=log_datefmt)
 
 # 256K max file size, 4 files max
-master_log_fh = logging.handlers.RotatingFileHandler(MASTER_LOG, maxBytes=(256*1024), backupCount=3)
-server_log_fh = logging.handlers.RotatingFileHandler(SERVER_LOG, maxBytes=(256*1024), backupCount=3)
-flow_log_fh   = logging.handlers.RotatingFileHandler(FLOW_LOG, maxBytes=(256*1024), backupCount=3)
-vi_log_fh     = logging.handlers.RotatingFileHandler(VI_LOG, maxBytes=(256*1024), backupCount=3)
+# delay=True to prevent file from being created until used, so e.g. vi_log isn't created in magicmirror
+master_log_fh = logging.handlers.RotatingFileHandler(MASTER_LOG, maxBytes=(256*1024), backupCount=3, delay=True)
+server_log_fh = logging.handlers.RotatingFileHandler(SERVER_LOG, maxBytes=(256*1024), backupCount=3, delay=True)
+flow_log_fh   = logging.handlers.RotatingFileHandler(FLOW_LOG, maxBytes=(256*1024), backupCount=3, delay=True)
+vi_log_fh     = logging.handlers.RotatingFileHandler(VI_LOG, maxBytes=(256*1024), backupCount=3, delay=True)
 
 # master_log (root) records eveything, level='DEBUG'
 server_log_fh.setLevel('INFO')
