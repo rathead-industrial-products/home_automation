@@ -90,7 +90,7 @@ class httpServerThread(threading.Thread):
 
 
 class davisThread(threading.Thread):
-    SAMPLE_INTERVAL = 10  # get weather every 10 mins, interval must divide fully into 60 (i.e. 15, 20, not 11)
+    SAMPLE_INTERVAL = 10  # get weather every 10 mins, interval must divide fully into 60 (i.e. 10, 15, 20, not 11)
     DAVIS_URL = "http://192.168.1.230/v1/current_conditions"
 
     def __init__(self):
@@ -108,9 +108,12 @@ class davisThread(threading.Thread):
             report['o_hum']  = weather['data']['conditions'][0]['hum']
             report['i_temp'] = weather['data']['conditions'][1]['temp_in']
             report['i_hum']  = weather['data']['conditions'][1]['hum_in']
+            report['wind_speed_1_min']  = weather['data']['conditions'][1]['wind_speed_avg_last_1_min']
+            report['wind_dir_1_min']  = weather['data']['conditions'][1]['wind_dir_scalar_avg_last_1_min']
+            report['wind_gust_10_min']  = weather['data']['conditions'][1]['wind_speed_hi_last_10_min']
             davis_log.info(report)
 
-            # repeat every SAMPLE_INTERVAL mins
+            # repeat ON every SAMPLE_INTERVAL mins
             time.sleep(60 * (self.SAMPLE_INTERVAL - (time.localtime().tm_min % self.SAMPLE_INTERVAL)))
 
 
@@ -130,7 +133,7 @@ class ecobeeThread(threading.Thread):
             # data = json.loads(os.system("curl" + ECOBEE_URL))
             # ecobee_log.info(data)
 
-            # repeat every SAMPLE_INTERVAL mins
+            # repeat ON every SAMPLE_INTERVAL mins
             time.sleep(60 * (self.SAMPLE_INTERVAL - (time.localtime().tm_min % self.SAMPLE_INTERVAL)))
 
 
@@ -164,10 +167,14 @@ davis_log_fh.setFormatter(data_log_formatter)
 ecobee_log_fh.setLevel('INFO')
 ecobee_log_fh.setFormatter(data_log_formatter)
 
-mirror_log      = logging.getLogger('han.mirror')
+mirror_log = logging.getLogger('han.mirror')
+mirror_log.addHandler(mirror_log_fh)
 davis_log       = logging.getLogger('han.mirror.davis')
+davis_log.addHandler(davis_log_fh)
 ecobee_log      = logging.getLogger('han.mirror.ecobee')
+ecobee_log.addHandler(ecobee_log_fh)
 node_status_log = logging.getLogger('han.mirror.node_status')
+node_status_log.addHandler(node_status_log_fh)
 
 mirror_log.info("")
 mirror_log.info("MAGICMIRROR STARTING...")

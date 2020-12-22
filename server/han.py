@@ -591,8 +591,8 @@ else:
     node_type = host_name.split('-')[0]
 
 # log configuration
-log_datefmt = '%m/%d/%Y %H:%M:%S '
 log_format ='%(asctime)s ' + host_name + ' %(levelname)s %(message)s'
+log_datefmt = '%m/%d/%Y %H:%M:%S '
 log_formatter = logging.Formatter(fmt=log_format, datefmt=log_datefmt)
 
 # 256K max file size, 4 files max
@@ -602,7 +602,9 @@ server_log_fh = logging.handlers.RotatingFileHandler(SERVER_LOG, maxBytes=(256*1
 flow_log_fh   = logging.handlers.RotatingFileHandler(FLOW_LOG, maxBytes=(256*1024), backupCount=3, delay=True)
 vi_log_fh     = logging.handlers.RotatingFileHandler(VI_LOG, maxBytes=(256*1024), backupCount=3, delay=True)
 
-# master_log (root) records eveything, level='DEBUG'
+# master_log records eveything, level='DEBUG'
+master_log_fh.setLevel('DEBUG')
+master_log_fh.setFormatter(log_formatter)
 server_log_fh.setLevel('INFO')
 server_log_fh.setFormatter(log_formatter)
 flow_log_fh.setLevel('INFO')
@@ -611,8 +613,13 @@ vi_log_fh.setLevel('INFO')
 vi_log_fh.setFormatter(log_formatter)
 
 # configure and instantiate loggers
-logging.basicConfig(format=log_format, datefmt=log_datefmt, handlers=(logging.StreamHandler(), master_log_fh), level='DEBUG')
-master_log = logging.getLogger('han')               # all nodes
+# don't use root logger
+# https://www.electricmonk.nl/log/2017/08/06/understanding-pythons-logging-module
+# master_log is the top of the hierarchy, root is not used
+master_log = logging.getLogger('han')
+master_log.addHandler(master_log_fh)
+master_log.setLevel(logging.DEBUG)
+
 server_log = logging.getLogger('han.server')
 server_log.addHandler(server_log_fh)
 
