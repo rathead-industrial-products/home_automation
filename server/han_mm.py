@@ -33,6 +33,9 @@ DAVIS_LOG       = LOG_PATH_BASE + "davis_log.txt"
 ECOBEE_LOG      = LOG_PATH_BASE + "ecobee_log.txt"
 NODE_STATUS_LOG = LOG_PATH_BASE + "node_status_log.txt"
 
+g_weather_latest = {}                 # global variable containing latest davis weather
+g_weather_lock   = threading.Lock()
+
 
 # CORS-aware HTTP request handler
 # from https://royportas.com/posts/2019-03-02-cors-python/
@@ -54,11 +57,16 @@ class RequestHandler(BaseHTTPRequestHandler):
       self.end_headers()
 
   def do_GET(self):
+      global g_weather_latest
+      global g_weather_lock
+
       self.send_response(200)
       self._send_cors_headers()
       self.end_headers()
 
-      response = {}
+      # fetch global variable with latest davis weather sample
+      with g_weather_lock:
+          response = g_weather_latest
       response["status"] = "OK"
       self.send_dict_response(response)
 
@@ -79,13 +87,14 @@ class RequestHandler(BaseHTTPRequestHandler):
 
 
 class httpServerThread(threading.Thread):
-    def __init__(self):
+    def __init__(self, host_ip):
         threading.Thread.__init__(self)
         self.daemon = True
+        self.host_ip = host_ip
 
     def run(self):
         mirror_log.info("Starting CORS-aware http server on port %s", JAVASCRIPT_HTTP_PORT)
-        httpd = HTTPServer(("127.0.0.1", JAVASCRIPT_HTTP_PORT), RequestHandler)
+        httpd = HTTPServer((self.host_ip, JAVASCRIPT_HTTP_PORT), RequestHandler)
         httpd.serve_forever()
 
 
@@ -98,6 +107,9 @@ class davisThread(threading.Thread):
         self.daemon = True
 
     def run(self):
+        global g_weather_latest
+        global g_weather_lock
+
         mirror_log.info("davisThread running")
 
         while True:
@@ -111,6 +123,11 @@ class davisThread(threading.Thread):
             report['wind_speed_1_min']  = weather['data']['conditions'][1]['wind_speed_avg_last_1_min']
             report['wind_dir_1_min']  = weather['data']['conditions'][1]['wind_dir_scalar_avg_last_1_min']
             report['wind_gust_10_min']  = weather['data']['conditions'][1]['wind_speed_hi_last_10_min']
+
+            # update global variable with latest sample
+            with g_weather_lock:
+                g_weather_latest = report
+
             davis_log.info(report)
 
             # repeat ON every SAMPLE_INTERVAL mins
@@ -186,5 +203,6 @@ davis_t.start()
 ecobee_t = ecobeeThread()
 ecobee_t.start()
 
-http_server_t = httpServerThread()
+host_ip = "192.168.1.200"
+http_server_t = httpServerThread(host_ip)
 http_server_t.start()
