@@ -33,9 +33,6 @@ DAVIS_LOG       = LOG_PATH_BASE + "davis_log.txt"
 ECOBEE_LOG      = LOG_PATH_BASE + "ecobee_log.txt"
 NODE_STATUS_LOG = LOG_PATH_BASE + "node_status_log.txt"
 
-g_weather_latest = {}                 # global variable containing latest davis weather
-g_weather_lock   = threading.Lock()
-
 
 # CORS-aware HTTP request handler
 # from https://royportas.com/posts/2019-03-02-cors-python/
@@ -57,18 +54,14 @@ class RequestHandler(BaseHTTPRequestHandler):
       self.end_headers()
 
   def do_GET(self):
-      global g_weather_latest
-      global g_weather_lock
-
       self.send_response(200)
       self._send_cors_headers()
       self.end_headers()
 
-      # fetch global variable with latest davis weather sample
-      with g_weather_lock:
-          response = g_weather_latest
-      response["status"] = "OK"
-      self.send_dict_response(response)
+      # return latest davis weather sample
+      DAVIS_URL = "http://192.168.1.230/v1/current_conditions"
+      weather = requests.get(self.DAVIS_URL).json()
+      self.send_dict_response(weather)
 
   def do_POST(self):
       self.send_response(200)
@@ -107,13 +100,10 @@ class davisThread(threading.Thread):
         self.daemon = True
 
     def run(self):
-        global g_weather_latest
-        global g_weather_lock
-
         mirror_log.info("davisThread running")
 
         while True:
-            # fetch and log JSON report from Davis Weatherlink
+            # fetch and log select weather parameters from Davis Weatherlink
             report = { }
             weather = requests.get(self.DAVIS_URL).json()
             report['o_temp'] = weather['data']['conditions'][0]['temp']
@@ -123,10 +113,6 @@ class davisThread(threading.Thread):
             report['wind_gust_10_min']  = weather['data']['conditions'][0]['wind_speed_hi_last_10_min']
             report['i_temp'] = weather['data']['conditions'][1]['temp_in']
             report['i_hum']  = weather['data']['conditions'][1]['hum_in']
-
-            # update global variable with latest sample
-            with g_weather_lock:
-                g_weather_latest = report
 
             davis_log.info(report)
 
