@@ -58,9 +58,11 @@ class RequestHandler(BaseHTTPRequestHandler):
       self._send_cors_headers()
       self.end_headers()
 
+      # replace this eventually with a proxy server
+      # i.e. http://magicmirror:6446?target="192.168.1.230/v1/current_conditions"
       # return latest davis weather sample
       DAVIS_URL = "http://192.168.1.230/v1/current_conditions"
-      weather = requests.get(self.DAVIS_URL).json()
+      weather = requests.get(DAVIS_URL).json()
       self.send_dict_response(weather)
 
   def do_POST(self):
