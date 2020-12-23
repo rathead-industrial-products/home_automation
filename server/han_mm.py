@@ -118,11 +118,11 @@ class davisThread(threading.Thread):
             weather = requests.get(self.DAVIS_URL).json()
             report['o_temp'] = weather['data']['conditions'][0]['temp']
             report['o_hum']  = weather['data']['conditions'][0]['hum']
+            report['wind_speed_1_min']  = weather['data']['conditions'][0]['wind_speed_avg_last_1_min']
+            report['wind_dir_1_min']  = weather['data']['conditions'][0]['wind_dir_scalar_avg_last_1_min']
+            report['wind_gust_10_min']  = weather['data']['conditions'][0]['wind_speed_hi_last_10_min']
             report['i_temp'] = weather['data']['conditions'][1]['temp_in']
             report['i_hum']  = weather['data']['conditions'][1]['hum_in']
-            report['wind_speed_1_min']  = weather['data']['conditions'][1]['wind_speed_avg_last_1_min']
-            report['wind_dir_1_min']  = weather['data']['conditions'][1]['wind_dir_scalar_avg_last_1_min']
-            report['wind_gust_10_min']  = weather['data']['conditions'][1]['wind_speed_hi_last_10_min']
 
             # update global variable with latest sample
             with g_weather_lock:
