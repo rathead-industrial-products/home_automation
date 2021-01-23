@@ -23,9 +23,35 @@ ALL DEVICES
 -----------
 
 --- Services ---
+** TODO:  How to install service
 systemctl status mitchell_han.service		// status
 systemctl restart mitchell_han.service		// after changes
 
 
-    
+NEW DEVICES - Pi Zero
+---------------------
+
+Install Raspberry Pi OS Lite on an SD Card.
+Install following files in SD card boot folder:
+	'ssh' <this enables SSH. File will be deleted at first boot>
+	'wpa_supplicant.conf' <OS will copy file to correct location at first boot>
+
+
+-- After Booting --   
+Change host name:
+	/etc/hostname
+	/etc/hosts
+
+Add needed packages:
+	sudo apt update
+	sudo apt install git
+
+From repository:
+	git ~/.bashrc
+
+Set time zone:
+	sudo raspi-config -> Localisation Options -> Change Time Zone
+
+
+
     

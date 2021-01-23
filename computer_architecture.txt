@@ -54,6 +54,10 @@ Application
 All devices run a server listening for connection requests on port 6445
 Not all devices respond to all message types
 
+magicmirror also runs an http server on port 6446 that proxies http requests
+from the javascript app. It also logs health status messages and weather
+from the Davis weatherlink and the ecobee thermostat
+
 Message Format
 --------------
 
@@ -96,8 +100,11 @@ TYPE (HEALTH_NOTICE)
 Node type target: magicmirror
 record node health
 
+
 =====================================================================================
-All devices run a service that sends health information to a logger at mindmentum.com
+All devices run a service that sends health information to the magicmirror and
+a logger at mindmentum.com
+
 Interval: 1 min
 
 POST URL to http://mindmentum.com/cgi-bin/ha.py
